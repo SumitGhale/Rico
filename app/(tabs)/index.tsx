@@ -1,6 +1,7 @@
 import { MessageBubble } from "@/components/MessageBubble";
 import { ThinkingIndicator } from "@/components/ThinkingIndicator";
 import { useLLM } from "@/hooks/useLLM";
+import { useSpeech } from "@/hooks/useSpeech";
 import { useWhisperModel } from "@/hooks/useWhisperModel";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -30,6 +31,12 @@ export default function ChatbotScreen() {
   // Gemini LLM
   const { sendMessage, messages, isGenerating, thinking, resetChat } = useLLM();
 
+  // Text-to-Speech
+  const { speak, stop: stopSpeech, isSpeaking, isMuted, toggleMute } = useSpeech();
+
+  // Track message count to detect new model responses
+  const prevMessageCountRef = useRef(0);
+
   useEffect(() => {
     async function initialize() {
       initializeWhisperModel("ggml-tiny.en-q5_1");
@@ -37,7 +44,7 @@ export default function ChatbotScreen() {
     initialize();
   }, []);
 
-  // Cleanup: release whisper context and stop recording on unmount
+  // Cleanup: release whisper context, stop recording & speech on unmount
   useEffect(() => {
     return () => {
       // Stop any active recording
@@ -49,8 +56,21 @@ export default function ChatbotScreen() {
       if (whisperContext) {
         whisperContext.release().catch(console.warn);
       }
+      // Stop any active speech
+      stopSpeech();
     };
-  }, [whisperContext]);
+  }, [whisperContext, stopSpeech]);
+
+  // Auto-speak new model responses
+  useEffect(() => {
+    if (messages.length > prevMessageCountRef.current) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === "model" && !lastMessage.text.startsWith("⚠️")) {
+        speak(lastMessage.text);
+      }
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages, speak]);
 
   // Auto-scroll to bottom when messages update
   useEffect(() => {
@@ -62,6 +82,9 @@ export default function ChatbotScreen() {
   }, [messages, isGenerating, thinking]);
 
   const startRealtimeTranscribtion = async () => {
+    // Stop any active speech when user starts recording
+    stopSpeech();
+
     // Guard against double-tap
     if (isRecording) {
       console.log("Already recording");
@@ -121,6 +144,9 @@ export default function ChatbotScreen() {
    * Handle sending a message — stops recording if active, then sends.
    */
   const handleSend = useCallback(async () => {
+    // Stop any active speech
+    stopSpeech();
+
     // Stop recording first if active
     if (isRecording) {
       await stopRecording();
@@ -136,7 +162,7 @@ export default function ChatbotScreen() {
 
     // Send to Gemini
     await sendMessage(textToSend);
-  }, [inputText, transcript, isGenerating, isRecording, stopRecording, sendMessage]);
+  }, [inputText, transcript, isGenerating, isRecording, stopRecording, sendMessage, stopSpeech]);
 
   const hasContent = inputText.trim().length > 0 || transcript.trim().length > 0;
   const hasMessages = messages.length > 0;
@@ -147,19 +173,52 @@ export default function ChatbotScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
-      {/* Header with reset button */}
+      {/* Header with mute toggle and reset button */}
       {hasMessages && (
         <View
           style={{
             flexDirection: "row",
-            justifyContent: "flex-end",
+            justifyContent: "space-between",
+            alignItems: "center",
             paddingHorizontal: 16,
             paddingTop: 8,
             paddingBottom: 4,
           }}
         >
+          {/* Mute / Unmute toggle */}
           <TouchableOpacity
-            onPress={resetChat}
+            onPress={toggleMute}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 16,
+              backgroundColor: isMuted ? "#fef2f2" : "#f0fdf4",
+            }}
+          >
+            <Ionicons
+              name={isMuted ? "volume-mute" : "volume-high"}
+              size={14}
+              color={isMuted ? "#ef4444" : "#22c55e"}
+            />
+            <Text
+              style={{
+                fontSize: 12,
+                color: isMuted ? "#ef4444" : "#22c55e",
+                marginLeft: 4,
+                fontWeight: "500",
+              }}
+            >
+              {isMuted ? "Muted" : "Voice on"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              stopSpeech();
+              resetChat();
+            }}
             style={{
               flexDirection: "row",
               alignItems: "center",
