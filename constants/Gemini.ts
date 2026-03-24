@@ -1,10 +1,6 @@
-// Gemini 2.5 Flash configuration
-// Replace YOUR_API_KEY with your actual Gemini API key
-// For production, use expo-secure-store instead of hardcoding
-
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
-export const GEMINI_API_KEY = API_KEY; // TODO: Replace with your actual API key
+export const GEMINI_API_KEY = API_KEY; 
 
 export const GEMINI_CONFIG = {
   model: "gemini-2.5-flash",
@@ -25,7 +21,7 @@ Your first goal is to fully understand the user's day.
 ## Today's date is: ${new Date().toISOString().split('T')[0]}
 Use this to resolve "today", "tomorrow", "next Monday" etc.
 
-## When the User Is Done
+## When the User Is Done  
 When the user says they're done (or implies it with 
 "that's it", "that's all", "nothing else" etc.) — 
 show a clean plain-English summary like this:

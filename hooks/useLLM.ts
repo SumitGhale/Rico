@@ -1,6 +1,11 @@
 import { GEMINI_API_KEY, GEMINI_CONFIG } from "@/constants/Gemini";
 import { GoogleGenAI } from "@google/genai";
 import { useCallback, useRef, useState } from "react";
+import {
+  parseScheduleBlock,
+  stripScheduleBlock,
+  type ScheduleEvent,
+} from "@/utils/parseSchedule";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -9,6 +14,7 @@ export interface Message {
   role: "user" | "model";
   text: string;
   thinking?: string; // thought summary from the model's reasoning
+  scheduleEvents?: ScheduleEvent[]; // parsed events from <SCHEDULE_READY> block
   timestamp: number;
 }
 
@@ -75,7 +81,7 @@ export function useLLM() {
         let fullText = "";
         let thoughtSummary = "";
 
-        // Parse thinking and answer parts from the response
+        // Parse answer parts from the response
         if (response.candidates?.[0]?.content?.parts) {
           for (const part of response.candidates[0].content.parts) {
             if (!part.text) continue;
@@ -84,12 +90,19 @@ export function useLLM() {
           }
         }
 
-        // 3. Add the complete model response to messages
+        // 3. Parse schedule block (if present)
+        const scheduleEvents = parseScheduleBlock(fullText) ?? undefined;
+        const displayText = scheduleEvents
+          ? stripScheduleBlock(fullText)
+          : fullText;
+
+        // 4. Add the complete model response to messages
         const modelMessage: Message = {
           id: `model-${Date.now()}`,
           role: "model",
-          text: fullText,
+          text: displayText,
           thinking: thoughtSummary || undefined,
+          scheduleEvents,
           timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, modelMessage]);

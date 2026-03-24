@@ -1,5 +1,7 @@
 import { MessageBubble } from "@/components/MessageBubble";
+import { ScheduleConfirmation } from "@/components/ScheduleConfirmation";
 import { ThinkingIndicator } from "@/components/ThinkingIndicator";
+import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { useLLM } from "@/hooks/useLLM";
 import { useSpeech } from "@/hooks/useSpeech";
 import { useWhisperModel } from "@/hooks/useWhisperModel";
@@ -30,6 +32,9 @@ export default function ChatbotScreen() {
 
   // Gemini LLM
   const { sendMessage, messages, isGenerating, thinking, resetChat } = useLLM();
+
+  // Calendar events (shared with Calendar screen)
+  const { addEvents } = useCalendarEvents();
 
   // Text-to-Speech
   const { speak, stop: stopSpeech, isSpeaking, isMuted, toggleMute } = useSpeech();
@@ -279,7 +284,16 @@ export default function ChatbotScreen() {
 
         {/* Message bubbles */}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <View key={msg.id}>
+            <MessageBubble message={msg} />
+            {msg.scheduleEvents && msg.scheduleEvents.length > 0 && (
+              <ScheduleConfirmation
+                events={msg.scheduleEvents}
+                onConfirm={() => addEvents(msg.scheduleEvents!)}
+                onDismiss={() => {}}
+              />
+            )}
+          </View>
         ))}
 
         {/* Thinking indicator (shown while model is reasoning) */}

@@ -1,7 +1,8 @@
 import React from 'react';
 import { SymbolView } from 'expo-symbols';
 import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -23,18 +24,32 @@ export default function TabLayout() {
         options={{
           tabBarStyle: { display: 'none' },
           headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable style={{ marginRight: 15 }}>
-                {({ pressed }) => (
-                  <SymbolView
-                    name={{ ios: 'info.circle', android: 'info', web: 'info' }}
-                    size={25}
-                    tintColor={Colors[colorScheme].text}
-                    style={{ opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Link href="/calendar" asChild>
+                <Pressable style={{ marginRight: 15 }}>
+                  {({ pressed }) => (
+                    <Ionicons
+                      name="calendar"
+                      size={25}
+                      color={Colors[colorScheme].text}
+                      style={{ opacity: pressed ? 0.5 : 1 }}
+                    />
+                  )}
+                </Pressable>
+              </Link>
+              <Link href="/modal" asChild>
+                <Pressable style={{ marginRight: 15 }}>
+                  {({ pressed }) => (
+                    <SymbolView
+                      name={{ ios: 'info.circle', android: 'info', web: 'info' }}
+                      size={25}
+                      tintColor={Colors[colorScheme].text}
+                      style={{ opacity: pressed ? 0.5 : 1 }}
+                    />
+                  )}
+                </Pressable>
+              </Link>
+            </View>
           ),
         }}
       />
