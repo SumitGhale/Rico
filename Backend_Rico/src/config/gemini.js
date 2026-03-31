@@ -1,7 +1,12 @@
-const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+import { GoogleGenAI } from "@google/genai";
 
-export const GEMINI_API_KEY = API_KEY; 
+// ─── API Key ─────────────────────────────────────────────────────────────────
+export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
+// ─── GenAI Client ────────────────────────────────────────────────────────────
+export const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+// ─── Model + System Prompt ───────────────────────────────────────────────────
 export const GEMINI_CONFIG = {
   model: "gemini-2.5-flash",
   systemInstruction: `You are RICO, a smart and friendly personal planning assistant.
@@ -18,7 +23,7 @@ Your first goal is to fully understand the user's day.
 - Default priority to "medium" unless urgency is implied
 - Keep asking "anything else?" until the user is done
 
-## Today's date is: ${new Date().toISOString().split('T')[0]}
+## Today's date is: ${new Date().toISOString().split("T")[0]}
 Use this to resolve "today", "tomorrow", "next Monday" etc.
 
 ## When the User Is Done  
