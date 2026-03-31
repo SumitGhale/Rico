@@ -1,6 +1,6 @@
 import { BACKEND_URL } from "@/constants/Gemini";
 import { useCallback, useState } from "react";
-import type { ScheduleEvent } from "@/utils/parseSchedule";
+import type { ScheduleEvent, ScheduleUpdate, ScheduleDelete } from "@/utils/parseSchedule";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -8,8 +8,10 @@ export interface Message {
   id: string;
   role: "user" | "model";
   text: string;
-  thinking?: string; // thought summary from the model's reasoning
-  scheduleEvents?: ScheduleEvent[]; // parsed events from <SCHEDULE_READY> block
+  thinking?: string;
+  scheduleEvents?: ScheduleEvent[];
+  scheduleUpdates?: ScheduleUpdate[];
+  scheduleDeletes?: ScheduleDelete[];
   timestamp: number;
 }
 
@@ -65,6 +67,8 @@ export function useLLM() {
           text: data.text ?? "",
           thinking: data.thinking || undefined,
           scheduleEvents: data.scheduleEvents,
+          scheduleUpdates: data.scheduleUpdates,
+          scheduleDeletes: data.scheduleDeletes,
           timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, modelMessage]);

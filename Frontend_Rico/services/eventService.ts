@@ -87,3 +87,10 @@ export async function deleteEventById(id: string): Promise<void> {
   const res = await fetch(`${EVENTS_URL}/${id}`, { method: "DELETE" });
   await handleResponse<{ success: boolean }>(res);
 }
+
+/** Delete multiple events by ID (sequential calls). */
+export async function deleteManyEvents(ids: string[]): Promise<void> {
+  for (const id of ids) {
+    await deleteEventById(id);
+  }
+}

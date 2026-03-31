@@ -1,11 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { EventItem } from "@howljs/calendar-kit";
-import type { ScheduleEvent } from "@/utils/parseSchedule";
+import type { ScheduleEvent, ScheduleUpdate, ScheduleDelete } from "@/utils/parseSchedule";
 import {
   fetchAllEvents,
   createEvent,
   createManyEvents,
   updateEventById,
+  deleteManyEvents,
   type BackendEvent,
 } from "@/services/eventService";
 
@@ -17,6 +18,8 @@ interface CalendarEventsContextValue {
   addEvents: (items: ScheduleEvent[]) => void;
   addDragEvent: (event: EventItem) => void;
   updateEvent: (id: string, start: EventItem["start"], end: EventItem["end"]) => void;
+  updateEvents: (updates: ScheduleUpdate[]) => Promise<void>;
+  deleteEvents: (deletes: ScheduleDelete[]) => Promise<void>;
   refreshEvents: () => Promise<void>;
 }
 
@@ -142,9 +145,51 @@ export function CalendarEventsProvider({ children }: { children: React.ReactNode
     [refreshEvents]
   );
 
+  /** Update events from a Gemini SCHEDULE_UPDATE block → updates DB. */
+  const updateEvents = useCallback(
+    async (updates: ScheduleUpdate[]) => {
+      try {
+        for (const upd of updates) {
+          const [hours, minutes] = upd.time.split(":").map(Number);
+          const startDate = new Date(`${upd.date}T00:00:00`);
+          startDate.setHours(hours, minutes, 0, 0);
+
+          const durationMs = (upd.duration_minutes ?? 60) * 60 * 1000;
+          const endDate = new Date(startDate.getTime() + durationMs);
+
+          await updateEventById(upd.id, {
+            title: upd.title,
+            start: startDate.toISOString(),
+            end: endDate.toISOString(),
+          });
+        }
+        // Refresh from DB to get the canonical state
+        await refreshEvents();
+      } catch (err) {
+        console.error("Failed to update events:", err);
+      }
+    },
+    [refreshEvents]
+  );
+
+  /** Delete events from a Gemini SCHEDULE_DELETE block → removes from DB. */
+  const deleteEvents = useCallback(
+    async (deletes: ScheduleDelete[]) => {
+      try {
+        await deleteManyEvents(deletes.map((d) => d.id));
+        // Remove from local state immediately
+        const deletedIds = new Set(deletes.map((d) => d.id));
+        setEvents((prev) => prev.filter((ev) => !deletedIds.has(ev.id as string)));
+      } catch (err) {
+        console.error("Failed to delete events:", err);
+      }
+    },
+    []
+  );
+
   return React.createElement(
     CalendarEventsContext.Provider,
-    { value: { events, loading, addEvents, addDragEvent, updateEvent, refreshEvents } },
+    { value: { events, loading, addEvents, addDragEvent, updateEvent, updateEvents, deleteEvents, refreshEvents } },
     children
   );
 }

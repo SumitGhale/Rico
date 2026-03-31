@@ -1,6 +1,8 @@
+import { DeleteConfirmation } from "@/components/DeleteConfirmation";
 import { MessageBubble } from "@/components/MessageBubble";
 import { ScheduleConfirmation } from "@/components/ScheduleConfirmation";
 import { ThinkingIndicator } from "@/components/ThinkingIndicator";
+import { UpdateConfirmation } from "@/components/UpdateConfirmation";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { useLLM } from "@/hooks/useLLM";
 import { useSpeech } from "@/hooks/useSpeech";
@@ -34,7 +36,7 @@ export default function ChatbotScreen() {
   const { sendMessage, messages, isGenerating, thinking, resetChat } = useLLM();
 
   // Calendar events (shared with Calendar screen)
-  const { addEvents } = useCalendarEvents();
+  const { addEvents, updateEvents, deleteEvents } = useCalendarEvents();
 
   // Text-to-Speech
   const { speak, stop: stopSpeech, isSpeaking, isMuted, toggleMute } = useSpeech();
@@ -290,6 +292,20 @@ export default function ChatbotScreen() {
               <ScheduleConfirmation
                 events={msg.scheduleEvents}
                 onConfirm={() => addEvents(msg.scheduleEvents!)}
+                onDismiss={() => {}}
+              />
+            )}
+            {msg.scheduleUpdates && msg.scheduleUpdates.length > 0 && (
+              <UpdateConfirmation
+                updates={msg.scheduleUpdates}
+                onConfirm={() => updateEvents(msg.scheduleUpdates!)}
+                onDismiss={() => {}}
+              />
+            )}
+            {msg.scheduleDeletes && msg.scheduleDeletes.length > 0 && (
+              <DeleteConfirmation
+                deletes={msg.scheduleDeletes}
+                onConfirm={() => deleteEvents(msg.scheduleDeletes!)}
                 onDismiss={() => {}}
               />
             )}

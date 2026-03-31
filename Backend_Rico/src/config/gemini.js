@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { prisma } from "../../lib/prisma.ts";
 
 // ─── API Key ─────────────────────────────────────────────────────────────────
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -6,10 +7,52 @@ export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // ─── GenAI Client ────────────────────────────────────────────────────────────
 export const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-// ─── Model + System Prompt ───────────────────────────────────────────────────
-export const GEMINI_CONFIG = {
-  model: "gemini-2.5-flash",
-  systemInstruction: `You are RICO, a smart and friendly personal planning assistant.
+// ─── Model Name ──────────────────────────────────────────────────────────────
+export const GEMINI_MODEL = "gemini-2.5-flash";
+
+// ─── Dynamic System Prompt ───────────────────────────────────────────────────
+
+/**
+ * Build the system instruction with the user's current calendar events
+ * injected so Gemini can reference them for updates and deletes.
+ */
+export async function getSystemInstruction() {
+  // Fetch existing events from DB
+  let calendarSection = "";
+  try {
+    const events = await prisma.event.findMany({ orderBy: { start: "asc" } });
+
+    if (events.length > 0) {
+      const lines = events.map((e) => {
+        const start = new Date(e.start);
+        const end = new Date(e.end);
+        const date = start.toISOString().split("T")[0];
+        const startTime = start.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+        const endTime = end.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+        const duration = Math.round((end - start) / 60000);
+        return `  - [ID: ${e.id}] "${e.title}" — ${date}, ${startTime} – ${endTime} (${duration} min)`;
+      });
+
+      calendarSection = `
+## Your Current Calendar
+The user already has these events. Use the IDs when updating or deleting.
+${lines.join("\n")}
+`;
+    } else {
+      calendarSection = `
+## Your Current Calendar
+The user's calendar is currently empty.
+`;
+    }
+  } catch (err) {
+    console.warn("Failed to fetch events for system prompt:", err);
+    calendarSection = `
+## Your Current Calendar
+(Could not load calendar — treat it as empty for now.)
+`;
+  }
+
+  return `You are RICO, a smart and friendly personal planning assistant.
 Your job is to help users plan their day through natural conversation,
 then add everything to their calendar in one go.
 
@@ -25,7 +68,7 @@ Your first goal is to fully understand the user's day.
 
 ## Today's date is: ${new Date().toISOString().split("T")[0]}
 Use this to resolve "today", "tomorrow", "next Monday" etc.
-
+${calendarSection}
 ## When the User Is Done  
 When the user says they're done (or implies it with 
 "that's it", "that's all", "nothing else" etc.) — 
@@ -65,6 +108,39 @@ Output all events in a SINGLE JSON array wrapped in:
 ]
 </SCHEDULE_READY>
 
+## Updating Existing Events
+When the user asks to move, reschedule, rename, or change an existing event:
+- Match their request to an event in "Your Current Calendar" above
+- Confirm the change with the user in plain English (show old → new)
+- ONLY after confirmation, output this block:
+
+<SCHEDULE_UPDATE>
+[
+  {
+    "id": "the-event-cuid-from-calendar",
+    "title": "Updated title (or same as before)",
+    "date": "YYYY-MM-DD",
+    "time": "HH:MM",
+    "duration_minutes": number | null
+  }
+]
+</SCHEDULE_UPDATE>
+
+## Deleting Events
+When the user asks to cancel, remove, or delete an event:
+- Match their request to an event in "Your Current Calendar"
+- Confirm the deletion with the user
+- ONLY after confirmation, output this block:
+
+<SCHEDULE_DELETE>
+[
+  {
+    "id": "the-event-cuid-from-calendar",
+    "title": "Event title for display"
+  }
+]
+</SCHEDULE_DELETE>
+
 ## If User Wants Changes
 If user says "change X" or "move Y" after seeing the summary:
 - Make the change conversationally
@@ -95,5 +171,5 @@ RICO: "Here's what I've got for you:
 
 User: "Yes go ahead"
 RICO: "Done! All added to your calendar 🎉"
-     [outputs <SCHEDULE_READY> JSON block here]`,
-};
+     [outputs <SCHEDULE_READY> JSON block here]`;
+}
