@@ -9,6 +9,8 @@ import '@/global.css';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { CalendarEventsProvider } from '@/hooks/useCalendarEvents';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { ActivityIndicator, View } from 'react-native';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -43,19 +45,42 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <AuthProvider>
+      <RootLayoutNav />
+    </AuthProvider>
+  );
 }
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // Show a loading indicator while checking auth state
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#030712' }}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+      </View>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <CalendarEventsProvider>
           <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+            {/* Sign-in: only accessible when NOT authenticated */}
+            <Stack.Protected guard={!isAuthenticated}>
+              <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+            </Stack.Protected>
+
+            {/* Main app: only accessible when authenticated */}
+            <Stack.Protected guard={isAuthenticated}>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="calendar" />
+              <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+            </Stack.Protected>
           </Stack>
         </CalendarEventsProvider>
       </ThemeProvider>

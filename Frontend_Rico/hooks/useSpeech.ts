@@ -58,6 +58,9 @@ export function useSpeech() {
 
       Speech.speak(cleaned, {
         ...DEFAULT_OPTIONS,
+        voice: "com.apple.speech.synthesis.voice.samantha.premium",
+        rate: 0.95,
+        pitch: 1.05,
         onStart: () => setIsSpeaking(true),
         onDone: () => {
           setIsSpeaking(false);

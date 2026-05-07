@@ -43,12 +43,14 @@ function colorForType(type: ScheduleEvent["type"]): string {
 
 /** Convert a BackendEvent (DB row) → EventItem (calendar-kit). */
 function toEventItem(evt: BackendEvent): EventItem {
+  const isGoogle = evt.source === "google";
   return {
     id: evt.id,
-    title: evt.title,
+    title: isGoogle ? `📅 ${evt.title}` : evt.title,
     start: { dateTime: evt.start },
     end: { dateTime: evt.end },
     color: evt.color ?? "#6b7280",
+    draggable: !isGoogle, // Google events are read-only
   };
 }
 
@@ -118,14 +120,15 @@ export function CalendarEventsProvider({ children }: { children: React.ReactNode
       setEvents((prev) => [...prev, toEventItem(created)]);
     } catch (err) {
       console.error("Failed to create drag event:", err);
-      // Optimistic fallback: still show the event locally
-      setEvents((prev) => [...prev, event]);
     }
   }, []);
 
   /** Update an event's time (from drag-to-edit) → updates DB. */
   const updateEvent = useCallback(
     async (id: string, start: EventItem["start"], end: EventItem["end"]) => {
+      // Google Calendar events are read-only
+      if (typeof id === "string" && id.startsWith("gcal-")) return;
+
       // Optimistic UI update
       setEvents((prev) =>
         prev.map((ev) => (ev.id === id ? { ...ev, start, end } : ev))
@@ -163,7 +166,7 @@ export function CalendarEventsProvider({ children }: { children: React.ReactNode
             end: endDate.toISOString(),
           });
         }
-        // Refresh from DB to get the canonical state
+        // Refresh from DB to get the updated state
         await refreshEvents();
       } catch (err) {
         console.error("Failed to update events:", err);

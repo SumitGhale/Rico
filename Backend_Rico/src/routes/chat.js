@@ -2,6 +2,7 @@ import { Router } from "express";
 import { ai, GEMINI_MODEL, getSystemInstruction } from "../config/gemini.js";
 
 const router = Router();
+const API_KEY = process.env.TTS_API_KEY;
 
 // ─── Block Parsers ───────────────────────────────────────────────────────────
 
@@ -46,6 +47,41 @@ async function getOrCreateChat() {
   return chat;
 }
 
+// call google cloud tts and return a base 64 audio
+const synthesizeSpeech = async (text) => {
+  if (!text || typeof text !== "string" || !text.trim()) {
+    return null;
+  }
+
+  const TTS_ENDPOINT = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${API_KEY}`
+
+  try {
+    const response = await fetch(TTS_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input: {
+          text: text,
+        },
+        voice: {
+          languageCode: 'en-US',
+          name: 'en-US-Journey-F',
+        },
+        audioConfig: {
+          audioEncoding: 'MP3',
+        },
+      }),
+    })
+    const data = await response.json()
+    return data.audioContent || null;
+  } catch (error) {
+    console.error("Error synthesizing speech:", error);
+    return null;
+  }
+}
+
 // ─── POST /chat — Send a message ─────────────────────────────────────────────
 router.post("/chat", async (req, res) => {
   try {
@@ -76,7 +112,11 @@ router.post("/chat", async (req, res) => {
     const hasBlocks = scheduleEvents || scheduleUpdates || scheduleDeletes;
     const displayText = hasBlocks ? stripAllBlocks(fullText) : fullText;
 
+    // convert display text to base 64 audio
+    const audioContent = await synthesizeSpeech(displayText);
+
     res.json({
+      audioContent: audioContent,
       text: displayText,
       thinking: thinking || undefined,
       scheduleEvents,

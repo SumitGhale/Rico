@@ -3,20 +3,26 @@ import express from "express";
 import cors from "cors";
 import chatRouter from "./routes/chat.js";
 import eventRouter from "./routes/event.js";
+import authRouter from "./routes/auth.js";
+import process from "node:process";
+
+const port = process.env.PORT || 8000;
 
 const app = express();
 
-app.use(cors());                 // Enable CORS
-app.use(express.json());         // Parse JSON bodies
+app.use(cors());
+app.use(express.json());
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
+app.use("/api/auth", authRouter);
 app.use("/api", chatRouter);
 app.use("/api", eventRouter);
 
-if (process.env.NODE_ENV !== "production") {
-  app.listen(8000, () => {
-    console.log("Server is running on port 8000");
-  });
-}
+// ─── Start Server ─────────────────────────────────────────────────────────────
+// if (process.env.NODE_ENV !== "production") {
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
+});
+// }
 
 export default app;

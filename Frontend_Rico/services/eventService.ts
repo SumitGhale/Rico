@@ -9,6 +9,7 @@ export interface BackendEvent {
   start: string; // ISO date-time
   end: string;   // ISO date-time
   color: string | null;
+  source?: "local" | "google";
   createdAt: string;
   updatedAt: string;
 }

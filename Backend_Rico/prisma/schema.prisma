@@ -12,12 +12,42 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  accounts  Account[]
+}
+
+model Account {
+  id           String   @id @default(cuid())
+  provider     String   // "email" | "google" | "apple"
+  providerId   String   // email address or OAuth subject ID
+  passwordHash String?  // only set for provider="email"
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([provider, providerId])
+}
+
 model Event {
-  id        String   @id @default(cuid())
-  title     String
-  start     DateTime
-  end       DateTime
-  color     String   @default("#42d9f4ff")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  title         String
+  start         DateTime
+  end           DateTime
+  color         String   @default("#42d9f4ff")
+  googleEventId String?  // Google Calendar event ID — null until synced
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model GoogleToken {
+  id           String   @id @default("default") // single-user
+  accessToken  String
+  refreshToken String
+  expiryDate   BigInt   // milliseconds since epoch
+  updatedAt    DateTime @updatedAt
 }

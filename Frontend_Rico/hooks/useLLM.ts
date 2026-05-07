@@ -12,6 +12,7 @@ export interface Message {
   scheduleEvents?: ScheduleEvent[];
   scheduleUpdates?: ScheduleUpdate[];
   scheduleDeletes?: ScheduleDelete[];
+  audioContent?: string;
   timestamp: number;
 }
 
@@ -69,6 +70,7 @@ export function useLLM() {
           scheduleEvents: data.scheduleEvents,
           scheduleUpdates: data.scheduleUpdates,
           scheduleDeletes: data.scheduleDeletes,
+          audioContent: data.audioContent || undefined,
           timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, modelMessage]);
