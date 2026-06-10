@@ -1,4 +1,5 @@
 import { BACKEND_URL } from "@/constants/Gemini";
+import { getAuthHeaders } from "@/services/authService";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,15 +47,17 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 /** Fetch all events from the backend, ordered by start date. */
 export async function fetchAllEvents(): Promise<BackendEvent[]> {
-  const res = await fetch(EVENTS_URL);
+  const headers = await getAuthHeaders();
+  const res = await fetch(EVENTS_URL, { headers });
   return handleResponse<BackendEvent[]>(res);
 }
 
 /** Create a single event in the database. */
 export async function createEvent(payload: CreateEventPayload): Promise<BackendEvent> {
+  const authHeaders = await getAuthHeaders();
   const res = await fetch(EVENTS_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   return handleResponse<BackendEvent>(res);
@@ -75,9 +78,10 @@ export async function updateEventById(
   id: string,
   payload: UpdateEventPayload
 ): Promise<BackendEvent> {
+  const authHeaders = await getAuthHeaders();
   const res = await fetch(`${EVENTS_URL}/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...authHeaders, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   return handleResponse<BackendEvent>(res);
@@ -85,7 +89,11 @@ export async function updateEventById(
 
 /** Delete an event by ID. */
 export async function deleteEventById(id: string): Promise<void> {
-  const res = await fetch(`${EVENTS_URL}/${id}`, { method: "DELETE" });
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${EVENTS_URL}/${id}`, {
+    method: "DELETE",
+    headers,
+  });
   await handleResponse<{ success: boolean }>(res);
 }
 

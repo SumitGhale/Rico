@@ -13,19 +13,21 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  name      String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  accounts  Account[]
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  accounts      Account[]
+  events        Event[]
+  conversations Conversation[]
 }
 
 model Account {
   id           String   @id @default(cuid())
-  provider     String   // "email" | "google" | "apple"
-  providerId   String   // email address or OAuth subject ID
-  passwordHash String?  // only set for provider="email"
+  provider     String // "email" | "google" | "apple"
+  providerId   String // email address or OAuth subject ID
+  passwordHash String? // only set for provider="email"
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt    DateTime @default(now())
@@ -39,15 +41,42 @@ model Event {
   start         DateTime
   end           DateTime
   color         String   @default("#42d9f4ff")
-  googleEventId String?  // Google Calendar event ID — null until synced
+  googleEventId String? // Google Calendar event ID — null until synced
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model GoogleToken {
   id           String   @id @default("default") // single-user
   accessToken  String
   refreshToken String
-  expiryDate   BigInt   // milliseconds since epoch
+  expiryDate   BigInt // milliseconds since epoch
   updatedAt    DateTime @updatedAt
+}
+
+model Conversation {
+  id        String        @id @default(cuid())
+  title     String?
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  role           String
+  content        String
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }

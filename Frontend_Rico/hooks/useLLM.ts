@@ -1,4 +1,5 @@
 import { BACKEND_URL } from "@/constants/Gemini";
+import { getAuthHeaders } from "@/services/authService";
 import { useCallback, useState } from "react";
 import type { ScheduleEvent, ScheduleUpdate, ScheduleDelete } from "@/utils/parseSchedule";
 
@@ -20,6 +21,7 @@ export interface Message {
 
 export function useLLM() {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [thinking, setThinking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,10 +48,14 @@ export function useLLM() {
 
       try {
         // 2. Call the Express backend
+        const authHeaders = await getAuthHeaders();
         const res = await fetch(`${BACKEND_URL}/api/chat`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text.trim() }),
+          headers: { ...authHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text.trim(),
+            conversationId,
+          }),
         });
 
         if (!res.ok) {
@@ -60,18 +66,12 @@ export function useLLM() {
         }
 
         const data = await res.json();
+        setConversationId(data.conversationId);
 
         // 3. Add the complete model response to messages
         const modelMessage: Message = {
-          id: `model-${Date.now()}`,
+          ...data.modelMessage,
           role: "model",
-          text: data.text ?? "",
-          thinking: data.thinking || undefined,
-          scheduleEvents: data.scheduleEvents,
-          scheduleUpdates: data.scheduleUpdates,
-          scheduleDeletes: data.scheduleDeletes,
-          audioContent: data.audioContent || undefined,
-          timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, modelMessage]);
       } catch (err: any) {
@@ -79,21 +79,12 @@ export function useLLM() {
         const errorText =
           err?.message || "Something went wrong. Please try again.";
         setError(errorText);
-
-        // Add an error message to the chat so user sees it
-        const errorMessage: Message = {
-          id: `error-${Date.now()}`,
-          role: "model",
-          text: `⚠️ ${errorText}`,
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, errorMessage]);
       } finally {
         setIsGenerating(false);
         setThinking(null);
       }
     },
-    []
+    [conversationId]
   );
 
   /**
@@ -106,9 +97,19 @@ export function useLLM() {
     setError(null);
 
     try {
-      await fetch(`${BACKEND_URL}/api/chat/reset`, { method: "DELETE" });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/api/chat/reset`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) {
+        throw new Error(`Server error (${res.status})`);
+      }
+      const data = await res.json();
+      setConversationId(data.conversationId);
     } catch (err) {
       console.warn("Failed to reset backend chat session:", err);
+      setConversationId(null);
     }
   }, []);
 

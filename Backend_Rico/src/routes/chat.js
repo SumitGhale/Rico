@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { ai, GEMINI_MODEL, getSystemInstruction } from "../config/gemini.js";
+import { requireAuth } from "../../middleware/authMiddleware.js";
+import { prisma } from "../../lib/prisma.ts";
 
 const router = Router();
 const API_KEY = process.env.TTS_API_KEY;
@@ -31,20 +33,46 @@ function stripAllBlocks(text) {
     .trim();
 }
 
-// ─── Single Global Chat Session ──────────────────────────────────────────────
-let chat = null;
+function toClientMessage(message) {
+  return {
+    id: message.id,
+    role: message.role,
+    text: message.content,
+    timestamp: message.createdAt.getTime(),
+  };
+}
 
-async function getOrCreateChat() {
-  if (!chat) {
-    const systemInstruction = await getSystemInstruction();
-    chat = ai.chats.create({
-      model: GEMINI_MODEL,
-      config: {
-        systemInstruction,
+async function findOwnedConversation(conversationId, userId, includeMessages = false) {
+  if (!conversationId) return null;
+
+  return prisma.conversation.findFirst({
+    where: { id: conversationId, userId },
+    ...(includeMessages && {
+      include: {
+        messages: {
+          orderBy: { createdAt: "asc" },
+        },
       },
-    });
-  }
-  return chat;
+    }),
+  });
+}
+
+async function createConversation(userId) {
+  return prisma.conversation.create({
+    data: { userId },
+  });
+}
+
+async function createChat(userId, messages) {
+  const systemInstruction = await getSystemInstruction(userId);
+  return ai.chats.create({
+    model: GEMINI_MODEL,
+    config: { systemInstruction },
+    history: messages.map((message) => ({
+      role: message.role,
+      parts: [{ text: message.content }],
+    })),
+  });
 }
 
 // call google cloud tts and return a base 64 audio
@@ -53,46 +81,119 @@ const synthesizeSpeech = async (text) => {
     return null;
   }
 
-  const TTS_ENDPOINT = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${API_KEY}`
+  if (!API_KEY) {
+    console.error("TTS request skipped: TTS_API_KEY is not configured");
+    return null;
+  }
+
+  const TTS_ENDPOINT = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${API_KEY}`;
 
   try {
     const response = await fetch(TTS_ENDPOINT, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         input: {
-          text: text,
+          text,
         },
         voice: {
-          languageCode: 'en-US',
-          name: 'en-US-Journey-F',
+          languageCode: "en-US",
+          name: "en-US-Journey-F",
         },
         audioConfig: {
-          audioEncoding: 'MP3',
+          audioEncoding: "MP3",
         },
       }),
-    })
-    const data = await response.json()
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Google TTS request failed:", {
+        status: response.status,
+        error: data?.error?.message || data,
+      });
+      return null;
+    }
+
+    if (!data.audioContent) {
+      console.error("Google TTS response did not contain audioContent");
+      return null;
+    }
+
     return data.audioContent || null;
   } catch (error) {
     console.error("Error synthesizing speech:", error);
     return null;
   }
-}
+};
+
+// ─── Conversation Routes ─────────────────────────────────────────────────────
+router.get("/chat/conversations", requireAuth, async (req, res) => {
+  try {
+    const conversations = await prisma.conversation.findMany({
+      where: { userId: req.userId },
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+    });
+    res.json(conversations);
+  } catch (err) {
+    console.error("List conversations error:", err);
+    res.status(500).json({ error: "Failed to load conversations" });
+  }
+});
+
+router.post("/chat/conversations", requireAuth, async (req, res) => {
+  try {
+    const conversation = await createConversation(req.userId);
+    res.status(201).json(conversation);
+  } catch (err) {
+    console.error("Create conversation error:", err);
+    res.status(500).json({ error: "Failed to create conversation" });
+  }
+});
+
+router.get("/chat/conversations/:conversationId/messages", requireAuth, async (req, res) => {
+  try {
+    const conversation = await findOwnedConversation(
+      req.params.conversationId,
+      req.userId,
+      true
+    );
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+    res.json(conversation.messages.map(toClientMessage));
+  } catch (err) {
+    console.error("Load messages error:", err);
+    res.status(500).json({ error: "Failed to load messages" });
+  }
+});
 
 // ─── POST /chat — Send a message ─────────────────────────────────────────────
-router.post("/chat", async (req, res) => {
+router.post("/chat", requireAuth, async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, conversationId } = req.body;
 
     if (!message || typeof message !== "string" || !message.trim()) {
       return res.status(400).json({ error: "message is required" });
     }
 
-    const currentChat = await getOrCreateChat();
-    const response = await currentChat.sendMessage({ message: message.trim() });
+    let conversation;
+    if (conversationId) {
+      conversation = await findOwnedConversation(conversationId, req.userId, true);
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+    } else {
+      conversation = await createConversation(req.userId);
+      conversation.messages = [];
+    }
+
+    const trimmedMessage = message.trim();
+    const currentChat = await createChat(req.userId, conversation.messages);
+    const response = await currentChat.sendMessage({ message: trimmedMessage });
 
     let fullText = "";
     let thinking = "";
@@ -112,16 +213,43 @@ router.post("/chat", async (req, res) => {
     const hasBlocks = scheduleEvents || scheduleUpdates || scheduleDeletes;
     const displayText = hasBlocks ? stripAllBlocks(fullText) : fullText;
 
+    const title = conversation.title || trimmedMessage.slice(0, 80);
+    const [userMessage, modelMessage] = await prisma.$transaction([
+      prisma.chatMessage.create({
+        data: {
+          role: "user",
+          content: trimmedMessage,
+          conversationId: conversation.id,
+        },
+      }),
+      prisma.chatMessage.create({
+        data: {
+          role: "model",
+          content: displayText,
+          conversationId: conversation.id,
+        },
+      }),
+      prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { title },
+      }),
+    ]);
+
     // convert display text to base 64 audio
     const audioContent = await synthesizeSpeech(displayText);
 
     res.json({
-      audioContent: audioContent,
+      conversationId: conversation.id,
+      userMessage: toClientMessage(userMessage),
+      modelMessage: {
+        ...toClientMessage(modelMessage),
+        audioContent: audioContent || undefined,
+        thinking: thinking || undefined,
+        scheduleEvents,
+        scheduleUpdates,
+        scheduleDeletes,
+      },
       text: displayText,
-      thinking: thinking || undefined,
-      scheduleEvents,
-      scheduleUpdates,
-      scheduleDeletes,
     });
   } catch (err) {
     console.error("Gemini API error:", err);
@@ -131,10 +259,15 @@ router.post("/chat", async (req, res) => {
   }
 });
 
-// ─── DELETE /chat/reset — Reset the conversation ─────────────────────────────
-router.delete("/chat/reset", (_req, res) => {
-  chat = null;
-  res.json({ success: true });
+// Keep the old endpoint compatible while making reset create a durable thread.
+router.delete("/chat/reset", requireAuth, async (req, res) => {
+  try {
+    const conversation = await createConversation(req.userId);
+    res.json({ success: true, conversationId: conversation.id });
+  } catch (err) {
+    console.error("Reset conversation error:", err);
+    res.status(500).json({ error: "Failed to reset conversation" });
+  }
 });
 
 export default router;

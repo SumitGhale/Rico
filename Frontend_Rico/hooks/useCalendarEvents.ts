@@ -9,6 +9,7 @@ import {
   deleteManyEvents,
   type BackendEvent,
 } from "@/services/eventService";
+import { useAuth } from "@/hooks/useAuth";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ function toEventItem(evt: BackendEvent): EventItem {
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function CalendarEventsProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuth();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -73,10 +75,15 @@ export function CalendarEventsProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
-  // Load events from DB on mount
+  // Load the authenticated user's events and clear them immediately on logout.
   useEffect(() => {
-    refreshEvents();
-  }, [refreshEvents]);
+    if (isAuthenticated) {
+      refreshEvents();
+    } else {
+      setEvents([]);
+      setLoading(false);
+    }
+  }, [isAuthenticated, user?.id, refreshEvents]);
 
   /** Add events from a Gemini SCHEDULE_READY block → saves to DB. */
   const addEvents = useCallback(

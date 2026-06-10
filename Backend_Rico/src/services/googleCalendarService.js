@@ -2,19 +2,19 @@ import { prisma } from "../../lib/prisma.ts";
 
 /**
  * Saves (or updates) OAuth tokens in the GoogleToken table.
- * Uses upsert with id="default" for single-user mode.
+ * Uses the authenticated user's ID as the token row ID.
  */
-export async function saveTokensToDB(tokens) {
-  console.log("Saving tokens to DB:", tokens);
+export async function saveTokensToDB(userId, tokens) {
+  console.log(`Saving tokens to DB for user ${userId}`);
   await prisma.googleToken.upsert({
-    where: { id: "default" },
+    where: { id: userId },
     update: {
       accessToken: tokens.access_token,
       ...(tokens.refresh_token && { refreshToken: tokens.refresh_token }),
       expiryDate: BigInt(tokens.expiry_date ?? 0),
     },
     create: {
-      id: "default",
+      id: userId,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token ?? "",
       expiryDate: BigInt(tokens.expiry_date ?? 0),
@@ -25,9 +25,11 @@ export async function saveTokensToDB(tokens) {
 /**
  * Loads tokens from DB and returns them, or null if none exist.
  */
-export async function loadTokensFromDB() {
+export async function loadTokensFromDB(userId) {
+  if (!userId) return null;
+
   try {
-    const row = await prisma.googleToken.findUnique({ where: { id: "default" } });
+    const row = await prisma.googleToken.findUnique({ where: { id: userId } });
     if (!row) return null;
     return {
       access_token: row.accessToken,
@@ -49,8 +51,8 @@ const GOOGLE_CALENDAR_API = process.env.GOOGLE_CALENDAR_API;
  * Uses the iOS client ID (PKCE / public client — no client_secret needed).
  * Returns null if no tokens are stored.
  */
-export async function getValidAccessToken() {
-  const tokens = await loadTokensFromDB();
+export async function getValidAccessToken(userId) {
+  const tokens = await loadTokensFromDB(userId);
   if (!tokens) return null;
 
   // If the token hasn't expired yet, return it as-is.
@@ -91,14 +93,13 @@ export async function getValidAccessToken() {
       
       // If the grant is invalid/revoked, delete it from the DB so the user is "disconnected"
       if (data.error === "invalid_grant") {
-        const { prisma } = await import("../../lib/prisma.ts");
-        await prisma.googleToken.deleteMany({ where: { id: "default" } });
+        await prisma.googleToken.deleteMany({ where: { id: userId } });
       }
       return null;
     }
 
     // Save the refreshed tokens back to DB
-    await saveTokensToDB({
+    await saveTokensToDB(userId, {
       access_token: data.access_token,
       refresh_token: data.refresh_token ?? tokens.refresh_token, // Google may not return a new refresh token
       expiry_date: data.expires_in
@@ -117,11 +118,12 @@ export async function getValidAccessToken() {
  * Fetches events from the user's primary Google Calendar.
  * Returns an empty array if not connected or on failure.
  *
+ * @param {string} userId - Authenticated Rico user ID
  * @param {string} [timeMin] - ISO date-time for the start of the range (default: 30 days ago)
  * @param {string} [timeMax] - ISO date-time for the end of the range (default: 30 days from now)
  */
-export async function fetchGoogleCalendarEvents(timeMin, timeMax) {
-  const accessToken = await getValidAccessToken();
+export async function fetchGoogleCalendarEvents(userId, timeMin, timeMax) {
+  const accessToken = await getValidAccessToken(userId);
   if (!accessToken) return [];
 
   // Default to ±30 days
@@ -179,11 +181,12 @@ export async function fetchGoogleCalendarEvents(timeMin, timeMax) {
  * Creates an event on the user's primary Google Calendar.
  * Returns the Google Calendar event ID on success, or null on failure.
  *
+ * @param {string} userId - Authenticated Rico user ID
  * @param {{ title: string, start: string, end: string, description?: string }} event
  * @returns {Promise<string | null>} The Google Calendar event ID, or null
  */
-export async function createGoogleCalendarEvent(event) {
-  const accessToken = await getValidAccessToken();
+export async function createGoogleCalendarEvent(userId, event) {
+  const accessToken = await getValidAccessToken(userId);
   if (!accessToken) return null;
 
   try {
@@ -223,14 +226,15 @@ export async function createGoogleCalendarEvent(event) {
  * Updates an existing event on the user's primary Google Calendar.
  * Returns true on success, false on failure.
  *
+ * @param {string} userId - Authenticated Rico user ID
  * @param {string} googleEventId - The Google Calendar event ID to update
  * @param {{ title?: string, start?: string, end?: string, description?: string, timeZone?: string }} updates
  * @returns {Promise<boolean>}
  */
-export async function updateGoogleCalendarEvent(googleEventId, updates) {
+export async function updateGoogleCalendarEvent(userId, googleEventId, updates) {
   if (!googleEventId) return false;
 
-  const accessToken = await getValidAccessToken();
+  const accessToken = await getValidAccessToken(userId);
   if (!accessToken) return false;
 
   try {
@@ -270,13 +274,14 @@ export async function updateGoogleCalendarEvent(googleEventId, updates) {
  * Deletes an event from the user's primary Google Calendar.
  * Returns true on success, false on failure.
  *
+ * @param {string} userId - Authenticated Rico user ID
  * @param {string} googleEventId - The Google Calendar event ID to delete
  * @returns {Promise<boolean>}
  */
-export async function deleteGoogleCalendarEvent(googleEventId) {
+export async function deleteGoogleCalendarEvent(userId, googleEventId) {
   if (!googleEventId) return false;
 
-  const accessToken = await getValidAccessToken();
+  const accessToken = await getValidAccessToken(userId);
   if (!accessToken) return false;
 
   try {

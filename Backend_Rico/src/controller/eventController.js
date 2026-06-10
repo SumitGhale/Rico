@@ -21,12 +21,13 @@ export const createEvent = async (req, res) => {
         title,
         start: new Date(start),
         end: new Date(end),
+        userId: req.userId,
         ...(color && { color }),
       },
     });
 
     // 2. If Google Calendar is connected, also create it there
-    const googleEventId = await createGoogleCalendarEvent({
+    const googleEventId = await createGoogleCalendarEvent(req.userId, {
       title,
       start: new Date(start).toISOString(),
       end: new Date(end).toISOString(),
@@ -48,10 +49,11 @@ export const createEvent = async (req, res) => {
 };
 
 // ─── Get All Events ──────────────────────────────────────────────────────────
-export const getAllEvents = async (_req, res) => {
+export const getAllEvents = async (req, res) => {
   try {
     // 1. Fetch local events from DB
     const localEvents = await prisma.event.findMany({
+      where: { userId: req.userId },
       orderBy: { start: "asc" },
     });
 
@@ -62,7 +64,7 @@ export const getAllEvents = async (_req, res) => {
     }));
 
     // 2. Fetch Google Calendar events (returns [] if not connected)
-    const googleEvents = await fetchGoogleCalendarEvents();
+    const googleEvents = await fetchGoogleCalendarEvents(req.userId);
 
     // 3. Deduplicate: remove Google events that already exist locally
     //    (matched by googleEventId on the local event)
@@ -94,6 +96,13 @@ export const updateEvent = async (req, res) => {
     const { id } = req.params;
     const { title, start, end, color } = req.body;
 
+    const existingEvent = await prisma.event.findFirst({
+      where: { id, userId: req.userId },
+    });
+    if (!existingEvent) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+
     // 1. Update the event locally
     const event = await prisma.event.update({
       where: { id },
@@ -107,7 +116,7 @@ export const updateEvent = async (req, res) => {
 
     // 2. If this event is linked to Google Calendar, update it there too
     if (event.googleEventId) {
-      await updateGoogleCalendarEvent(event.googleEventId, {
+      await updateGoogleCalendarEvent(req.userId, event.googleEventId, {
         ...(title && { title }),
         ...(start && { start: new Date(start).toISOString() }),
         ...(end && { end: new Date(end).toISOString() }),
@@ -130,14 +139,16 @@ export const deleteEvent = async (req, res) => {
     const { id } = req.params;
 
     // 1. Fetch the event first to check for a Google Calendar link
-    const event = await prisma.event.findUnique({ where: { id } });
+    const event = await prisma.event.findFirst({
+      where: { id, userId: req.userId },
+    });
     if (!event) {
       return res.status(404).json({ error: "Event not found" });
     }
 
     // 2. If linked to Google Calendar, delete it there first
     if (event.googleEventId) {
-      await deleteGoogleCalendarEvent(event.googleEventId);
+      await deleteGoogleCalendarEvent(req.userId, event.googleEventId);
     }
 
     // 3. Delete locally

@@ -36,8 +36,8 @@ export const exchangeGoogleToken = async (req, res) => {
       return res.status(400).json({ error: tokenData.error_description ?? "Token exchange failed" });
     }
 
-    // Save tokens to DB (same format as the existing flow)
-    await saveTokensToDB({
+    // Save tokens to DB (using the unique user ID instead of "default")
+    await saveTokensToDB(req.userId, {
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
       expiry_date: tokenData.expires_in
@@ -52,9 +52,9 @@ export const exchangeGoogleToken = async (req, res) => {
   }
 };
 
-export const getGoogleAuthStatus = async (_req, res) => {
+export const getGoogleAuthStatus = async (req, res) => {
   try {
-    const tokens = await loadTokensFromDB();
+    const tokens = await loadTokensFromDB(req.userId);
     res.json({ connected: !!tokens });
   } catch (err) {
     console.error("Failed to check auth status:", err);
@@ -62,10 +62,10 @@ export const getGoogleAuthStatus = async (_req, res) => {
   }
 };
 
-export const disconnectGoogleAuth = async (_req, res) => {
+export const disconnectGoogleAuth = async (req, res) => {
   try {
     const { prisma } = await import("../../lib/prisma.ts");
-    await prisma.googleToken.deleteMany({ where: { id: "default" } });
+    await prisma.googleToken.deleteMany({ where: { id: req.userId } });
     res.json({ disconnected: true });
   } catch (err) {
     console.error("Failed to disconnect:", err);

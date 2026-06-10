@@ -47,10 +47,10 @@ export default function ChatbotScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Whisper (on-device speech-to-text)
-  const { initializeWhisperModel, whisperContext, initializingModel } = useWhisperModel();
+  const { initializeWhisperModel, whisperContext, initializingModel, isDownloading } = useWhisperModel();
 
   // Gemini LLM
-  const { sendMessage, messages, isGenerating, thinking, resetChat } = useLLM();
+  const { sendMessage, messages, isGenerating, thinking, resetChat, error } = useLLM();
 
   // Calendar events (shared with Calendar screen)
   const { addEvents, updateEvents, deleteEvents } = useCalendarEvents();
@@ -451,6 +451,16 @@ export default function ChatbotScreen() {
         </View>
       )}
 
+      {/* Model Downloading Banner */}
+      {isDownloading && (
+        <View className="flex-row items-center justify-center bg-blue-50 py-[10px] px-4 border-b border-blue-100">
+          <ActivityIndicator size="small" color="#3b82f6" className="mr-2" />
+          <Text className="text-blue-700 text-[13px] font-medium">
+            Downloading speech model...
+          </Text>
+        </View>
+      )}
+
       {/* Chat Messages Area */}
       <ScrollView
         ref={scrollViewRef}
@@ -550,6 +560,13 @@ export default function ChatbotScreen() {
           <Text style={{ fontSize: 14, color: "#1f2937", marginTop: 2 }}>
             {transcript}
           </Text>
+        </View>
+      )}
+
+      {/* Error Banner */}
+      {error && (
+        <View style={{ backgroundColor: "#fef2f2", padding: 10, marginHorizontal: 16, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: "#fca5a5" }}>
+          <Text style={{ color: "#b91c1c", fontSize: 13, textAlign: "center", fontWeight: "500" }}>⚠️ {error}</Text>
         </View>
       )}
 

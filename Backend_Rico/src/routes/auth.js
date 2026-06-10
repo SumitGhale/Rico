@@ -11,16 +11,16 @@ router.post("/login", login);
 router.get("/me", requireAuth, getMe);
 
 // ─── Google Calendar OAuth ───────────────────────────────────────────────────
-router.post("/google/exchange", exchangeGoogleToken);
+router.post("/google/exchange", requireAuth, exchangeGoogleToken);
 
 // ─── GET /api/auth/google/status ─────────────────────────────────────────────
 // The app calls this to check whether the user has already connected.
 
-router.get("/google/status", getGoogleAuthStatus);
+router.get("/google/status", requireAuth, getGoogleAuthStatus);
 
 // ─── DELETE /api/auth/google/disconnect ──────────────────────────────────────
 // Removes the stored tokens — effectively disconnects Google Calendar.
 
-router.delete("/google/disconnect", disconnectGoogleAuth);
+router.delete("/google/disconnect", requireAuth, disconnectGoogleAuth);
 
 export default router;

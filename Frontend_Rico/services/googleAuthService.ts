@@ -1,5 +1,6 @@
 import * as AuthSession from "expo-auth-session";
 import { BACKEND_URL } from "@/constants/Gemini";
+import { getAuthHeaders } from "./authService";
 
 const AUTH_BASE = `${BACKEND_URL}/api/auth`;  
 
@@ -45,7 +46,8 @@ function reverseClientId(clientId: string): string {
  */
 export async function checkGoogleConnectionStatus(): Promise<boolean> {
   try {
-    const res = await fetch(`${AUTH_BASE}/google/status`);
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${AUTH_BASE}/google/status`, { headers });
     if (!res.ok) return false;
     const data: ConnectionStatus = await res.json();
     return data.connected;
@@ -98,9 +100,10 @@ export async function connectGoogleCalendar(): Promise<boolean> {
     // Send the authorization code to the backend for token exchange.
     // We also send the redirectUri and codeVerifier so the backend can
     // complete the PKCE exchange with Google's token endpoint.
+    const headers = await getAuthHeaders();
     const exchangeRes = await fetch(`${AUTH_BASE}/google/exchange`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({
         code: result.params.code,
         redirectUri,
@@ -125,5 +128,6 @@ export async function connectGoogleCalendar(): Promise<boolean> {
  * (Phase 1 only clears the local status — full revoke can be added later)
  */
 export async function disconnectGoogleCalendar(): Promise<void> {
-  await fetch(`${AUTH_BASE}/google/disconnect`, { method: "DELETE" });
+  const headers = await getAuthHeaders();
+  await fetch(`${AUTH_BASE}/google/disconnect`, { method: "DELETE", headers });
 }

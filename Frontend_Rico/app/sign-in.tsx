@@ -34,7 +34,8 @@ export default function SignInScreen() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
       return "Enter a valid email address";
     if (!password) return "Password is required";
-    if (password.length < 6) return "Password must be at least 6 characters";
+    if (!isLogin && password.length < 8)
+      return "Password must be at least 8 characters";
     return null;
   };
 
@@ -178,7 +179,7 @@ export default function SignInScreen() {
                 <TextInput
                   className="flex-1 text-white text-base py-3.5 ml-3"
                   placeholder={
-                    isLogin ? "Enter your password" : "Min. 6 characters"
+                    isLogin ? "Enter your password" : "Min. 8 characters"
                   }
                   placeholderTextColor="#6b7280"
                   value={password}

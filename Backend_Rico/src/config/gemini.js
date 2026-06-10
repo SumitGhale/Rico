@@ -16,11 +16,14 @@ export const GEMINI_MODEL = "gemini-2.5-flash";
  * Build the system instruction with the user's current calendar events
  * injected so Gemini can reference them for updates and deletes.
  */
-export async function getSystemInstruction() {
+export async function getSystemInstruction(userId) {
   // Fetch existing events from DB
   let calendarSection = "";
   try {
-    const events = await prisma.event.findMany({ orderBy: { start: "asc" } });
+    const events = await prisma.event.findMany({
+      where: { userId },
+      orderBy: { start: "asc" },
+    });
 
     if (events.length > 0) {
       const lines = events.map((e) => {
