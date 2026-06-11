@@ -10,6 +10,7 @@ import '@/global.css';
 import { useColorScheme } from '@/components/useColorScheme';
 import { CalendarEventsProvider } from '@/hooks/useCalendarEvents';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { WhisperModelProvider } from '@/hooks/useWhisperModel';
 import { ActivityIndicator, View } from 'react-native';
 
 export {
@@ -47,7 +48,9 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <WhisperModelProvider>
+        <RootLayoutNav />
+      </WhisperModelProvider>
     </AuthProvider>
   );
 }
@@ -79,7 +82,10 @@ function RootLayoutNav() {
             <Stack.Protected guard={isAuthenticated}>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="calendar" />
-              <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+              <Stack.Screen
+                name="modal"
+                options={{ presentation: 'modal', title: 'Speech Models' }}
+              />
             </Stack.Protected>
           </Stack>
         </CalendarEventsProvider>

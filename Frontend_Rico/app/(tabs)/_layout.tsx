@@ -1,7 +1,6 @@
 import React from 'react';
-import { SymbolView } from 'expo-symbols';
 import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import Colors from '@/constants/Colors';
@@ -40,10 +39,10 @@ export default function TabLayout() {
               <Link href="/modal" asChild>
                 <Pressable style={{ marginRight: 15 }}>
                   {({ pressed }) => (
-                    <SymbolView
-                      name={{ ios: 'info.circle', android: 'info', web: 'info' }}
+                    <Ionicons
+                      name="settings-outline"
                       size={25}
-                      tintColor={Colors[colorScheme].text}
+                      color={Colors[colorScheme].text}
                       style={{ opacity: pressed ? 0.5 : 1 }}
                     />
                   )}
