@@ -262,7 +262,6 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
             setError("Switch to another downloaded model before deleting the active model.");
             return false;
         }
-
         try {
             setError(null);
             const model = getModel(modelId);
@@ -303,6 +302,7 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
         downloadingModelId,
         error,
         initializeWhisperModel,
+        initializingModel,
         isRecordingActive,
         modelFiles,
         preferencesLoaded,

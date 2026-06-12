@@ -5,15 +5,13 @@ import {
 } from "@/hooks/useWhisperModel";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -32,15 +30,27 @@ export default function ModalScreen() {
     initializingModel,
     isRecordingActive,
     error,
-    downloadModel,
     deleteModel,
     initializeWhisperModel,
     refreshModelFiles,
   } = useWhisperModel();
+  const [selectingModelId, setSelectingModelId] = useState<string | null>(null);
+  const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
 
   useEffect(() => {
     refreshModelFiles();
   }, [refreshModelFiles]);
+
+  const selectModel = async (modelId: string) => {
+    if (modelId === currentModelId || selectingModelId) return;
+
+    setSelectingModelId(modelId);
+    try {
+      await initializeWhisperModel(modelId);
+    } finally {
+      setSelectingModelId(null);
+    }
+  };
 
   const confirmDelete = (modelId: string, label: string) => {
     Alert.alert(
@@ -51,31 +61,50 @@ export default function ModalScreen() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => deleteModel(modelId),
+          onPress: async () => {
+            setDeletingModelId(modelId);
+            try {
+              await deleteModel(modelId);
+            } finally {
+              setDeletingModelId(null);
+            }
+          },
         },
       ]
     );
   };
 
+  const actionsBlocked = initializingModel || selectingModelId !== null;
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.headingRow}>
-          <View style={styles.headingIcon}>
+    <View className="flex-1 bg-slate-50">
+      <ScrollView contentContainerClassName="px-5 pb-10 pt-5">
+        <View className="mb-6 flex-row items-start">
+          <View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
             <Ionicons name="hardware-chip-outline" size={24} color="#2563eb" />
           </View>
-          <View style={styles.headingText}>
-            <Text style={styles.title}>Speech Models</Text>
-            <Text style={styles.subtitle}>
+          <View className="flex-1">
+            <Text className="text-2xl font-bold text-slate-900">
+              Speech Models
+            </Text>
+            <Text className="mt-1 text-sm leading-5 text-slate-500">
               Models run entirely on your device. Base Q5 is recommended for
               better English accuracy.
             </Text>
           </View>
         </View>
 
+        {isRecordingActive && (
+          <View className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <Text className="text-[13px] text-amber-800">
+              End the current voice recording before switching speech models.
+            </Text>
+          </View>
+        )}
+
         {error && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
+          <View className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3">
+            <Text className="text-[13px] text-red-700">{error}</Text>
           </View>
         )}
 
@@ -85,277 +114,138 @@ export default function ModalScreen() {
           const active = currentModelId === model.id;
           const selected = selectedModelId === model.id;
           const downloading = downloadingModelId === model.id;
-          const busy = downloading || (initializingModel && selected);
+          const selecting = selectingModelId === model.id;
+          const deleting = deletingModelId === model.id;
+          const selectionDisabled =
+            active || actionsBlocked || isRecordingActive || deletingModelId !== null;
 
           return (
-            <View key={model.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={styles.modelNameContainer}>
-                  <Text style={styles.modelName}>{model.label}</Text>
-                  <Text style={styles.modelDescription}>{model.description}</Text>
+            <View
+              key={model.id}
+              className={`mb-4 rounded-2xl border bg-white p-4 ${
+                active ? "border-green-300" : "border-slate-200"
+              }`}
+            >
+              <View className="flex-row items-start justify-between">
+                <View className="flex-1 pr-2">
+                  <Text className="text-[17px] font-bold text-slate-900">
+                    {model.label}
+                  </Text>
+                  <Text className="mt-1 text-[13px] leading-[18px] text-slate-500">
+                    {model.description}
+                  </Text>
                 </View>
-                <View style={styles.badges}>
+
+                <View className="items-end gap-1">
                   {model.id === DEFAULT_WHISPER_MODEL_ID && (
-                    <View style={[styles.badge, styles.recommendedBadge]}>
-                      <Text style={styles.recommendedText}>Recommended</Text>
+                    <View className="rounded-full bg-blue-50 px-2 py-1">
+                      <Text className="text-[11px] font-bold text-blue-600">
+                        Recommended
+                      </Text>
                     </View>
                   )}
                   {active && (
-                    <View style={[styles.badge, styles.activeBadge]}>
-                      <Text style={styles.activeText}>Active</Text>
+                    <View className="rounded-full bg-green-100 px-2 py-1">
+                      <Text className="text-[11px] font-bold text-green-700">
+                        Active
+                      </Text>
                     </View>
                   )}
                 </View>
               </View>
 
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailText}>
+              <View className="mt-4 flex-row items-center justify-between">
+                <Text className="text-[13px] text-slate-600">
                   {installed
                     ? `Installed · ${formatBytes(fileInfo.size)}`
                     : `Download · about ${formatBytes(model.expectedSize)}`}
                 </Text>
                 {selected && !active && (
-                  <Text style={styles.selectedText}>Selected</Text>
+                  <Text className="text-xs font-semibold text-blue-600">
+                    Saved choice
+                  </Text>
                 )}
               </View>
 
-              <View style={styles.actions}>
-                {!installed ? (
-                  <Pressable
-                    disabled={downloadingModelId !== null}
-                    onPress={() => downloadModel(model.id)}
-                    style={({ pressed }) => [
-                      styles.primaryButton,
-                      (pressed || downloadingModelId !== null) && styles.buttonPressed,
-                    ]}
-                  >
-                    {downloading ? (
+              <View className="mt-4 flex-row gap-2.5">
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    active
+                      ? `${model.label} is active`
+                      : `Use ${model.label}`
+                  }
+                  disabled={selectionDisabled}
+                  onPress={() => selectModel(model.id)}
+                  className={`min-h-[44px] flex-1 flex-row items-center justify-center gap-2 rounded-xl px-3.5 ${
+                    selectionDisabled ? "bg-blue-300" : "bg-blue-600"
+                  }`}
+                >
+                  {selecting || downloading ? (
+                    <>
                       <ActivityIndicator size="small" color="#ffffff" />
+                      <Text className="text-sm font-bold text-white">
+                        {downloading ? "Downloading..." : "Loading..."}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      {!installed && (
+                        <Ionicons
+                          name="cloud-download-outline"
+                          size={17}
+                          color="#ffffff"
+                        />
+                      )}
+                      <Text className="text-sm font-bold text-white">
+                        {active
+                          ? "In use"
+                          : installed
+                            ? "Use model"
+                            : "Download & use"}
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+
+                {installed && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${model.label}`}
+                    disabled={active || actionsBlocked || deletingModelId !== null}
+                    onPress={() => confirmDelete(model.id, model.label)}
+                    className={`min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl px-3.5 ${
+                      active || actionsBlocked || deletingModelId !== null
+                        ? "bg-red-50 opacity-40"
+                        : "bg-red-50"
+                    }`}
+                  >
+                    {deleting ? (
+                      <ActivityIndicator size="small" color="#dc2626" />
                     ) : (
                       <>
-                        <Ionicons name="cloud-download-outline" size={17} color="#ffffff" />
-                        <Text style={styles.primaryButtonText}>Download</Text>
+                        <Ionicons name="trash-outline" size={17} color="#dc2626" />
+                        <Text className="text-sm font-bold text-red-600">
+                          Delete
+                        </Text>
                       </>
                     )}
                   </Pressable>
-                ) : (
-                  <>
-                    <Pressable
-                      disabled={active || initializingModel || isRecordingActive}
-                      onPress={() => initializeWhisperModel(model.id)}
-                      style={({ pressed }) => [
-                        styles.primaryButton,
-                        (active || initializingModel || isRecordingActive || pressed) && styles.buttonPressed,
-                      ]}
-                    >
-                      {busy ? (
-                        <ActivityIndicator size="small" color="#ffffff" />
-                      ) : (
-                        <Text style={styles.primaryButtonText}>
-                          {active ? "In use" : "Use model"}
-                        </Text>
-                      )}
-                    </Pressable>
-
-                    <Pressable
-                      disabled={active || initializingModel}
-                      onPress={() => confirmDelete(model.id, model.label)}
-                      style={({ pressed }) => [
-                        styles.deleteButton,
-                        (active || initializingModel || pressed) && styles.buttonPressed,
-                      ]}
-                    >
-                      <Ionicons name="trash-outline" size={17} color="#dc2626" />
-                      <Text style={styles.deleteButtonText}>Delete</Text>
-                    </Pressable>
-                  </>
                 )}
               </View>
             </View>
           );
         })}
 
-        <View style={styles.note}>
+        <View className="mt-1 flex-row gap-2 rounded-xl bg-slate-100 p-3">
           <Ionicons name="information-circle-outline" size={18} color="#64748b" />
-          <Text style={styles.noteText}>
-            The active model cannot be deleted. Switch to another downloaded
-            model first. Core ML files are not required for this evaluation.
+          <Text className="flex-1 text-xs leading-[17px] text-slate-500">
+            Selecting a model downloads it when needed and makes it active. The
+            active model cannot be deleted; switch to another model first.
           </Text>
         </View>
       </ScrollView>
       <StatusBar style={Platform.OS === "ios" ? "dark" : "auto"} />
-    </SafeAreaView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  container: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  headingRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 22,
-  },
-  headingIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#dbeafe",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  headingText: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#64748b",
-    marginTop: 4,
-  },
-  errorBanner: {
-    backgroundColor: "#fef2f2",
-    borderColor: "#fecaca",
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-  },
-  errorText: {
-    color: "#b91c1c",
-    fontSize: 13,
-  },
-  card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 16,
-    marginBottom: 14,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-  },
-  modelNameContainer: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  modelName: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  modelDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#64748b",
-    marginTop: 4,
-  },
-  badges: {
-    alignItems: "flex-end",
-    gap: 5,
-  },
-  badge: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  recommendedBadge: {
-    backgroundColor: "#eff6ff",
-  },
-  recommendedText: {
-    color: "#2563eb",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  activeBadge: {
-    backgroundColor: "#dcfce7",
-  },
-  activeText: {
-    color: "#15803d",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  detailsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 14,
-  },
-  detailText: {
-    color: "#475569",
-    fontSize: 13,
-  },
-  selectedText: {
-    color: "#2563eb",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 14,
-  },
-  primaryButton: {
-    minHeight: 42,
-    flex: 1,
-    borderRadius: 12,
-    backgroundColor: "#2563eb",
-    flexDirection: "row",
-    gap: 7,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-  primaryButtonText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  deleteButton: {
-    minHeight: 42,
-    borderRadius: 12,
-    backgroundColor: "#fef2f2",
-    flexDirection: "row",
-    gap: 7,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-  deleteButtonText: {
-    color: "#dc2626",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  buttonPressed: {
-    opacity: 0.5,
-  },
-  note: {
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: "#f1f5f9",
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 4,
-  },
-  noteText: {
-    flex: 1,
-    color: "#64748b",
-    fontSize: 12,
-    lineHeight: 17,
-  },
-});
