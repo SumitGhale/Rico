@@ -141,6 +141,7 @@ export function useLLM(options: UseLLMOptions = {}) {
           body: JSON.stringify({
             message: trimmedText,
             conversationId,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           }),
           signal: abortController.signal,
         });

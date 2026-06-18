@@ -74,8 +74,8 @@ async function createConversation(userId) {
   });
 }
 
-async function createChat(userId, messages) {
-  const systemInstruction = await getSystemInstruction(userId);
+async function createChat(userId, messages, timeZone = "UTC") {
+  const systemInstruction = await getSystemInstruction(userId, timeZone);
   return ai.chats.create({
     model: GEMINI_MODEL,
     config: { systemInstruction },
@@ -185,7 +185,7 @@ router.get("/chat/conversations/:conversationId/messages", requireAuth, async (r
 // ─── POST /chat/stream — Stream a Gemini response as NDJSON ──────────────────
 router.post("/chat/stream", requireAuth, async (req, res) => {
   try {
-    const { message, conversationId } = req.body;
+    const { message, conversationId, timezone } = req.body;
 
     if (!message || typeof message !== "string" || !message.trim()) {
       return res.status(400).json({ error: "message is required" });
@@ -216,7 +216,7 @@ router.post("/chat/stream", requireAuth, async (req, res) => {
     });
 
     const trimmedMessage = message.trim();
-    const currentChat = await createChat(req.userId, conversation.messages);
+    const currentChat = await createChat(req.userId, conversation.messages, timezone);
     const stream = await currentChat.sendMessageStream({
       message: trimmedMessage,
     });
@@ -356,7 +356,7 @@ router.post("/chat/stream", requireAuth, async (req, res) => {
 // ─── POST /chat — Send a message ─────────────────────────────────────────────
 router.post("/chat", requireAuth, async (req, res) => {
   try {
-    const { message, conversationId } = req.body;
+    const { message, conversationId, timezone } = req.body;
 
     if (!message || typeof message !== "string" || !message.trim()) {
       return res.status(400).json({ error: "message is required" });
@@ -374,7 +374,7 @@ router.post("/chat", requireAuth, async (req, res) => {
     }
 
     const trimmedMessage = message.trim();
-    const currentChat = await createChat(req.userId, conversation.messages);
+    const currentChat = await createChat(req.userId, conversation.messages, timezone);
     const response = await currentChat.sendMessage({ message: trimmedMessage });
 
     let fullText = "";

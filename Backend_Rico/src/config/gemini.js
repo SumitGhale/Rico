@@ -16,7 +16,7 @@ export const GEMINI_MODEL = "gemini-2.5-flash";
  * Build the system instruction with the user's current calendar events
  * injected so Gemini can reference them for updates and deletes.
  */
-export async function getSystemInstruction(userId) {
+export async function getSystemInstruction(userId, timeZone = "UTC") {
   // Fetch existing events from DB
   let calendarSection = "";
   try {
@@ -29,9 +29,9 @@ export async function getSystemInstruction(userId) {
       const lines = events.map((e) => {
         const start = new Date(e.start);
         const end = new Date(e.end);
-        const date = start.toISOString().split("T")[0];
-        const startTime = start.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-        const endTime = end.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+        const date = start.toLocaleDateString("en-CA", { timeZone });
+        const startTime = start.toLocaleTimeString("en-US", { timeZone, hour: "2-digit", minute: "2-digit", hour12: true });
+        const endTime = end.toLocaleTimeString("en-US", { timeZone, hour: "2-digit", minute: "2-digit", hour12: true });
         const duration = Math.round((end - start) / 60000);
         return `  - [ID: ${e.id}] "${e.title}" — ${date}, ${startTime} – ${endTime} (${duration} min)`;
       });
@@ -69,7 +69,7 @@ Your first goal is to fully understand the user's day.
 - Default priority to "medium" unless urgency is implied
 - Keep asking "anything else?" until the user is done
 
-## Today's date is: ${new Date().toISOString().split("T")[0]}
+## Today's date is: ${new Date().toLocaleDateString("en-CA", { timeZone })}
 Use this to resolve "today", "tomorrow", "next Monday" etc.
 ${calendarSection}
 ## When the User Is Done  
