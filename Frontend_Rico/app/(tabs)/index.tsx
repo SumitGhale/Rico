@@ -52,20 +52,40 @@ export default function ChatbotScreen() {
     setVoiceRecordingActive,
   } = useWhisperModel();
 
+  // Audio playback & recording permissions
+  const {
+    isPlaying,
+    isPlaybackActive,
+    isMuted,
+    beginAudioStream,
+    enqueueAudio,
+    finishAudioStream,
+    clearAudioQueue,
+    toggleMute,
+    checkRecordingPermission,
+  } = useAudio();
+
   // Gemini LLM
-  const { sendMessage, messages, isGenerating, thinking, resetChat, error } = useLLM();
+  const {
+    sendMessage,
+    messages,
+    isGenerating,
+    thinking,
+    resetChat,
+    error,
+    cancelGeneration,
+  } = useLLM({
+    onAudioStreamStart: beginAudioStream,
+    onAudioChunk: enqueueAudio,
+    onAudioStreamComplete: finishAudioStream,
+    onAudioStreamCancel: clearAudioQueue,
+  });
 
   // Calendar events (shared with Calendar screen)
   const { addEvents, updateEvents, deleteEvents } = useCalendarEvents();
 
   // Text-to-Speech
   const { stop: stopSpeech } = useSpeech();
-
-  // Audio playback & recording permissions
-  const { isPlaying, isPlaybackActive, isMuted, playAudio, toggleMute, checkRecordingPermission } = useAudio();
-
-  // Track message count to detect new model responses
-  const prevMessageCountRef = useRef(0);
 
   useEffect(() => {
     if (preferencesLoaded) {
@@ -90,21 +110,16 @@ export default function ChatbotScreen() {
       }
       setVoiceRecordingActive(false);
       stopSpeech();
+      cancelGeneration();
+      clearAudioQueue();
     };
-  }, [clearEndpointTimer, setVoiceRecordingActive, stopSpeech]);
-
-  // Auto-speak new model responses
-  useEffect(() => {
-    if (messages.length > prevMessageCountRef.current) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role === "model" && !lastMessage.text.startsWith("⚠️")) {
-        if (lastMessage.audioContent) {
-          playAudio(lastMessage.audioContent);
-        }
-      }
-    }
-    prevMessageCountRef.current = messages.length;
-  }, [messages, playAudio]);
+  }, [
+    cancelGeneration,
+    clearAudioQueue,
+    clearEndpointTimer,
+    setVoiceRecordingActive,
+    stopSpeech,
+  ]);
 
   // Auto-restart recording after TTS finishes (hands-free conversational loop)
   useEffect(() => {
@@ -230,7 +245,12 @@ export default function ChatbotScreen() {
 
       // Subscribe to transcription events
       subscribe((event: any) => {
-        const { isCapturing, data } = event;
+        const { isCapturing, error, data } = event;
+
+        if (error) {
+          console.error("Transcription error:", error);
+          return;
+        }
 
         if (data?.result) {
           const currentResult = data.result.trim();
@@ -314,8 +334,15 @@ export default function ChatbotScreen() {
   const endVoiceSession = useCallback(() => {
     voiceSessionActiveRef.current = false;
     clearEndpointTimer();
+    cancelGeneration();
+    clearAudioQueue();
     stopRecording();
-  }, [clearEndpointTimer, stopRecording]);
+  }, [
+    cancelGeneration,
+    clearAudioQueue,
+    clearEndpointTimer,
+    stopRecording,
+  ]);
 
   const hasContent = inputText.trim().length > 0 || transcript.trim().length > 0;
   const hasMessages = messages.length > 0;
@@ -370,34 +397,35 @@ export default function ChatbotScreen() {
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             {/* End voice session button (visible when hands-free loop is active) */}
-            {voiceSessionActiveRef.current && (isRecording || isGenerating || isPlaying) && (
-              <TouchableOpacity
-                onPress={() => {
-                  stopSpeech();
-                  endVoiceSession();
-                }}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 16,
-                  backgroundColor: "#fef2f2",
-                }}
-              >
-                <Ionicons name="stop-circle" size={14} color="#ef4444" />
-                <Text
+            {voiceSessionActiveRef.current &&
+              (isRecording || isGenerating || isPlaybackActive) && (
+                <TouchableOpacity
+                  onPress={() => {
+                    stopSpeech();
+                    endVoiceSession();
+                  }}
                   style={{
-                    fontSize: 12,
-                    color: "#ef4444",
-                    marginLeft: 4,
-                    fontWeight: "500",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 16,
+                    backgroundColor: "#fef2f2",
                   }}
                 >
-                  End voice
-                </Text>
-              </TouchableOpacity>
-            )}
+                  <Ionicons name="stop-circle" size={14} color="#ef4444" />
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: "#ef4444",
+                      marginLeft: 4,
+                      fontWeight: "500",
+                    }}
+                  >
+                    End voice
+                  </Text>
+                </TouchableOpacity>
+              )}
 
             <TouchableOpacity
               onPress={() => {
@@ -614,11 +642,11 @@ export default function ChatbotScreen() {
             justifyContent: "center",
             backgroundColor: isGenerating
               ? "#9ca3af"
-              : (initializingModel || voiceUnavailable) && !hasContent
+              : (initializingModel || voiceUnavailable || isPlaybackActive) && !hasContent
                 ? "#9ca3af"
                 : "#3b82f6",
           }}
-          disabled={isGenerating || ((initializingModel || voiceUnavailable) && !hasContent)}
+          disabled={isGenerating || ((initializingModel || voiceUnavailable || isPlaybackActive) && !hasContent)}
           onPress={() => {
             if (hasContent) {
               handleSend();

@@ -14,37 +14,92 @@ export function useAudio() {
   const player = useAudioPlayer(null);
   const playerStatus = useAudioPlayerStatus(player);
 
-  // Track whether we're expecting / actively playing TTS audio
-  // (guards against the race where playerStatus.playing is still false while audio loads)
+  const audioChunksRef = useRef(new Map<number, string>());
+  const nextSequenceRef = useRef(0);
+  const currentSequenceRef = useRef<number | null>(null);
+  const finalSequenceCountRef = useRef<number | null>(null);
+  const [queueRevision, setQueueRevision] = useState(0);
   const [isPlaybackActive, setIsPlaybackActive] = useState(false);
 
-  // ─── Clear isPlaybackActive when playback truly finishes ──────────────────
-
   useEffect(() => {
-    if (!playerStatus.playing && isPlaybackActive) {
-      // Player was active and has now stopped — playback finished
-      console.log("🔊 Playback finished");
-      setIsPlaybackActive(false);
+    if (currentSequenceRef.current !== null) return;
+
+    const finalSequenceCount = finalSequenceCountRef.current;
+
+    while (
+      finalSequenceCount !== null &&
+      nextSequenceRef.current < finalSequenceCount &&
+      !audioChunksRef.current.has(nextSequenceRef.current)
+    ) {
+      // A TTS request failed, so the server emitted no audio for this sequence.
+      nextSequenceRef.current += 1;
     }
-  }, [playerStatus.playing, isPlaybackActive]);
 
-  // ─── Play base64-encoded TTS audio ────────────────────────────────────────
+    const sequence = nextSequenceRef.current;
+    const audioContent = audioChunksRef.current.get(sequence);
 
-  const playAudio = useCallback(
-    async (base64AudioContent: string) => {
-      try {
-        // Mark playback as active BEFORE calling play()
-        // so the auto-restart effect won't fire during audio load
-        setIsPlaybackActive(true);
-        player.replace(`data:audio/mp3;base64,${base64AudioContent}`);
-        player.play();
-      } catch (err) {
-        console.error("Error playing TTS audio:", err);
+    if (!audioContent) {
+      if (
+        finalSequenceCount !== null &&
+        sequence >= finalSequenceCount
+      ) {
         setIsPlaybackActive(false);
       }
-    },
-    [player]
-  );
+      return;
+    }
+
+    audioChunksRef.current.delete(sequence);
+    currentSequenceRef.current = sequence;
+    setIsPlaybackActive(true);
+
+    try {
+      player.replace(`data:audio/mp3;base64,${audioContent}`);
+      player.play();
+    } catch (error) {
+      console.error(`Error playing TTS audio chunk ${sequence}:`, error);
+      currentSequenceRef.current = null;
+      nextSequenceRef.current = sequence + 1;
+      setQueueRevision((revision) => revision + 1);
+    }
+  }, [player, queueRevision]);
+
+  useEffect(() => {
+    if (!playerStatus.didJustFinish || currentSequenceRef.current === null) {
+      return;
+    }
+
+    nextSequenceRef.current = currentSequenceRef.current + 1;
+    currentSequenceRef.current = null;
+    setQueueRevision((revision) => revision + 1);
+  }, [playerStatus.didJustFinish]);
+
+  const clearAudioQueue = useCallback(() => {
+    player.pause();
+    audioChunksRef.current.clear();
+    nextSequenceRef.current = 0;
+    currentSequenceRef.current = null;
+    finalSequenceCountRef.current = null;
+    setIsPlaybackActive(false);
+    setQueueRevision((revision) => revision + 1);
+  }, [player]);
+
+  const beginAudioStream = useCallback(() => {
+    clearAudioQueue();
+    setIsPlaybackActive(true);
+  }, [clearAudioQueue]);
+
+  const enqueueAudio = useCallback((sequence: number, audioContent: string) => {
+    if (sequence < nextSequenceRef.current) return;
+
+    audioChunksRef.current.set(sequence, audioContent);
+    setIsPlaybackActive(true);
+    setQueueRevision((revision) => revision + 1);
+  }, []);
+
+  const finishAudioStream = useCallback((audioChunkCount: number) => {
+    finalSequenceCountRef.current = audioChunkCount;
+    setQueueRevision((revision) => revision + 1);
+  }, []);
 
   // ─── Mute / Unmute toggle ─────────────────────────────────────────────────
 
@@ -82,7 +137,10 @@ export function useAudio() {
     isMuted,
 
     // Actions
-    playAudio,
+    beginAudioStream,
+    enqueueAudio,
+    finishAudioStream,
+    clearAudioQueue,
     toggleMute,
     checkRecordingPermission,
   };

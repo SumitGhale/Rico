@@ -4,6 +4,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { setAudioModeAsync } from 'expo-audio';
 import { useEffect } from 'react';
 import '@/global.css';
 
@@ -30,6 +31,20 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+
+  // Keep the iOS audio session in .playAndRecord for the whole app lifetime so
+  // streamed TTS playback never flips it back to .playback and tears down the
+  // mic input route mid-conversation. expo-audio adds .defaultToSpeaker when
+  // allowsRecording is true, so TTS still plays through the speaker.
+  useEffect(() => {
+    setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      interruptionMode: 'mixWithOthers',
+    }).catch((modeError) => {
+      console.warn('Failed to configure audio mode:', modeError);
+    });
+  }, []);
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
