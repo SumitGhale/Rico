@@ -238,7 +238,11 @@ export default function ChatbotScreen() {
           options: ["MixWithOthers" as any],
           mode: "Default" as any,
         },
-        audioSessionOnStopIos: "restore" as any,
+        // Do NOT pass "restore" here: it reconfigures/deactivates the iOS audio
+        // session asynchronously on stop, which can land mid-TTS-playback and
+        // break the next chunk's session activation. Omitting it keeps the
+        // session in its current PlayAndRecord state, matching the app-wide mode
+        // set in _layout.tsx.
       });
       stopRef.current = stop;
       setIsRecording(true);

@@ -1,1 +1,1 @@
-export const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? "http://[IP_ADDRESS]";
+export const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? "https://rico-rl6v.onrender.com";
