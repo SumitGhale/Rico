@@ -1,5 +1,5 @@
 import { BACKEND_URL } from "@/constants/Gemini";
-import { getAuthHeaders } from "@/services/authService";
+import { getAuthHeaders, handleUnauthorizedToken } from "@/services/authService";
 import type {
   ScheduleDelete,
   ScheduleEvent,
@@ -147,6 +147,7 @@ export function useLLM(options: UseLLMOptions = {}) {
         });
 
         if (!response.ok || !response.body) {
+          if (response.status === 401) await handleUnauthorizedToken();
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
             errorData.error || `Server error (${response.status})`
@@ -267,6 +268,7 @@ export function useLLM(options: UseLLMOptions = {}) {
         headers,
       });
       if (!response.ok) {
+        if (response.status === 401) await handleUnauthorizedToken();
         throw new Error(`Server error (${response.status})`);
       }
       const data = await response.json();

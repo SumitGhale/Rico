@@ -1,4 +1,5 @@
 import * as SecureStore from "expo-secure-store";
+import { Alert } from "react-native";
 import { BACKEND_URL } from "@/constants/Gemini";
 
 const AUTH_BASE = `${BACKEND_URL}/api/auth`;
@@ -30,6 +31,50 @@ export async function getToken(): Promise<string | null> {
 export async function clearToken(): Promise<void> {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
 }
+
+// A process-wide slot holding one callback. The React layer (AuthProvider)
+// registers its logout logic here so plain modules can trigger a logout without
+// importing React state. null until something registers a handler.
+let unauthorizedHandler: (() => void) | null = null;
+
+/**
+ * Register what should happen when a request reveals the token is no longer valid
+ * (e.g. AuthProvider passes `() => setUser(null)`). Pass `null` to unregister.
+ */
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  unauthorizedHandler = fn;
+}
+
+// Guards against stacking multiple alerts when several requests 401 at once.
+let unauthorizedNoticeVisible = false;
+
+/**
+ * Call when any authenticated request returns 401. Clears the dead token, shows
+ * a "session expired" notice, and on OK fires the registered handler so the app
+ * resets to a logged-out state. Idempotent — safe to call from multiple 401 sites.
+ */
+export const handleUnauthorizedToken = async (): Promise<void> => {
+  await clearToken();
+
+  // If a notice is already up (parallel requests all 401'd), don't stack more.
+  if (unauthorizedNoticeVisible) return;
+  unauthorizedNoticeVisible = true;
+
+  Alert.alert(
+    "Session expired",
+    "Your session has expired. Please sign in again.",
+    [
+      {
+      text: "OK",
+        onPress: () => {
+          unauthorizedNoticeVisible = false;
+          unauthorizedHandler?.();
+        },
+      },
+    ],
+    { cancelable: false }
+  );
+};
 
 /**
  * Returns authorization headers with the stored JWT token.

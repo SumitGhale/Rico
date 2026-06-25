@@ -12,6 +12,7 @@ import {
   login as loginApi,
   logout as logoutApi,
   register as registerApi,
+  setUnauthorizedHandler,
 } from "@/services/authService";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -57,6 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Let plain service modules trigger a logout: when any authenticated request
+  // gets a 401, `handleUnauthorizedToken` clears the token and calls this handler,
+  // which resets `user` → `isAuthenticated` false → the guard redirects to sign-in.
+  useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null));
+    return () => setUnauthorizedHandler(null);
   }, []);
 
   const register = useCallback(

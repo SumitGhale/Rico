@@ -1,5 +1,5 @@
 import { BACKEND_URL } from "@/constants/Gemini";
-import { getAuthHeaders } from "@/services/authService";
+import { getAuthHeaders, handleUnauthorizedToken } from "@/services/authService";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,6 +37,8 @@ const EVENTS_URL = `${BACKEND_URL}/api/events`;
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    // Token expired/invalid — clear it and trigger logout before surfacing the error.
+    if (res.status === 401) await handleUnauthorizedToken();
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Server error (${res.status})`);
   }

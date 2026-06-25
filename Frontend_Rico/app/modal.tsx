@@ -1,3 +1,4 @@
+import { useAuth } from "@/hooks/useAuth";
 import {
   DEFAULT_WHISPER_MODEL_ID,
   WHISPER_MODELS,
@@ -34,8 +35,10 @@ export default function ModalScreen() {
     initializeWhisperModel,
     refreshModelFiles,
   } = useWhisperModel();
+  const { user, logout } = useAuth();
   const [selectingModelId, setSelectingModelId] = useState<string | null>(null);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     refreshModelFiles();
@@ -72,6 +75,24 @@ export default function ModalScreen() {
         },
       ]
     );
+  };
+
+  const confirmLogout = () => {
+    Alert.alert("Log out?", "You'll need to sign in again to use Rico.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: async () => {
+          setLoggingOut(true);
+          try {
+            await logout();
+          } finally {
+            setLoggingOut(false);
+          }
+        },
+      },
+    ]);
   };
 
   const actionsBlocked = initializingModel || selectingModelId !== null;
@@ -243,6 +264,32 @@ export default function ModalScreen() {
             Selecting a model downloads it when needed and makes it active. The
             active model cannot be deleted; switch to another model first.
           </Text>
+        </View>
+
+        <View className="mt-8 border-t border-slate-200 pt-5">
+          {user?.email && (
+            <Text className="mb-3 text-center text-xs text-slate-400">
+              Signed in as {user.email}
+            </Text>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
+            disabled={loggingOut}
+            onPress={confirmLogout}
+            className={`min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 ${
+              loggingOut ? "opacity-40" : ""
+            }`}
+          >
+            {loggingOut ? (
+              <ActivityIndicator size="small" color="#dc2626" />
+            ) : (
+              <>
+                <Ionicons name="log-out-outline" size={18} color="#dc2626" />
+                <Text className="text-sm font-bold text-red-600">Log out</Text>
+              </>
+            )}
+          </Pressable>
         </View>
       </ScrollView>
       <StatusBar style={Platform.OS === "ios" ? "dark" : "auto"} />

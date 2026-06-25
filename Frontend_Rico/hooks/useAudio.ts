@@ -134,7 +134,13 @@ const playNext = useCallback(() => {
   });
 
   const clearAudioQueue = useCallback(() => {
-    player.pause();
+    try {
+      player.pause();
+    } catch {
+      // During screen unmount (e.g. logout) the native player may already be
+      // released, so pause() throws NativeSharedObjectNotFoundException. There's
+      // nothing to pause in that case — ignore it.
+    }
     audioChunksRef.current.clear();
     nextSequenceRef.current = 0;
     currentSequenceRef.current = null;
