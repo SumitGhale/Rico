@@ -1,5 +1,6 @@
 import { BACKEND_URL } from "@/constants/Gemini";
 import { getAuthHeaders, handleUnauthorizedToken } from "@/services/authService";
+import { fetchConversationMessages } from "@/services/chatService";
 import type {
   ScheduleDelete,
   ScheduleEvent,
@@ -255,6 +256,13 @@ export function useLLM(options: UseLLMOptions = {}) {
     ]
   );
 
+  const loadConversation = useCallback(async (id: string) => {
+    cancelGeneration();
+    const msgs = await fetchConversationMessages(id);
+    setMessages(msgs);
+    setConversationId(id);
+  }, [cancelGeneration]);
+
   const resetChat = useCallback(async () => {
     cancelGeneration();
     setMessages([]);
@@ -287,5 +295,6 @@ export function useLLM(options: UseLLMOptions = {}) {
     error,
     resetChat,
     cancelGeneration,
+    loadConversation,
   };
 }

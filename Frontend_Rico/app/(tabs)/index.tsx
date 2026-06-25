@@ -1,3 +1,4 @@
+import { ConversationSidebar } from "@/components/ConversationSidebar";
 import { DeleteConfirmation } from "@/components/DeleteConfirmation";
 import { MessageBubble } from "@/components/MessageBubble";
 import { ScheduleConfirmation } from "@/components/ScheduleConfirmation";
@@ -8,8 +9,9 @@ import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { useLLM } from "@/hooks/useLLM";
 import { useSpeech } from "@/hooks/useSpeech";
 import { useWhisperModel } from "@/hooks/useWhisperModel";
+import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -39,6 +41,22 @@ export default function ChatbotScreen() {
 
   // Track whether current recording was voice-initiated (for auto-restart)
   const voiceSessionActiveRef = useRef(false);
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => setIsSidebarOpen(true)}
+          style={{ marginLeft: 15 }}
+        >
+          <Ionicons name="menu" size={25} color="#374151" />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   // Whisper (on-device speech-to-text)
   const {
@@ -74,6 +92,7 @@ export default function ChatbotScreen() {
     resetChat,
     error,
     cancelGeneration,
+    loadConversation,
   } = useLLM({
     onAudioStreamStart: beginAudioStream,
     onAudioChunk: enqueueAudio,
@@ -235,7 +254,12 @@ export default function ChatbotScreen() {
         vadThold: 0.7,
         audioSessionOnStartIos: {
           category: "PlayAndRecord" as any,
-          options: ["MixWithOthers" as any],
+          // DefaultToSpeaker routes output to the loud bottom speaker instead of
+          // the earpiece receiver. Without it, PlayAndRecord defaults to the
+          // earpiece, so TTS plays back quiet/"phone-call"-like. Since we don't
+          // restore the session on stop, this config also governs TTS playback,
+          // and it matches the app-wide mode in _layout.tsx.
+          options: ["MixWithOthers" as any, "DefaultToSpeaker" as any],
           mode: "Default" as any,
         },
         // Do NOT pass "restore" here: it reconfigures/deactivates the iOS audio
@@ -623,8 +647,8 @@ export default function ChatbotScreen() {
             style={{
               marginLeft: 8,
               borderRadius: 24,
-              width: 40,
-              height: 40,
+              width: 48,
+              height: 48,
               alignItems: "center",
               justifyContent: "center",
               backgroundColor: "#ef4444",
@@ -670,6 +694,12 @@ export default function ChatbotScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      <ConversationSidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onSelectConversation={loadConversation}
+      />
     </KeyboardAvoidingView>
   );
 }
