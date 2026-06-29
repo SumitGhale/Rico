@@ -142,6 +142,7 @@ export default function ChatbotScreen() {
 
   // Auto-restart recording after TTS finishes (hands-free conversational loop)
   useEffect(() => {
+    console.log(Intl.DateTimeFormat().resolvedOptions().timeZone);
     // When TTS just finished AND we're in voice session mode AND not generating
     // IMPORTANT: also check isPlaybackActive to avoid the race where
     // isPlaying is still false while the audio is loading
@@ -205,8 +206,8 @@ export default function ChatbotScreen() {
     latestTranscriptRef.current = "";
     setTranscript("");
     setInputText("");
-    await sendMessage(textToSend);
-  }, [clearEndpointTimer, sendMessage, setVoiceRecordingActive]);
+    await sendMessage(textToSend, isMuted);
+  }, [clearEndpointTimer, sendMessage, setVoiceRecordingActive, isMuted]);
 
   const scheduleEndpointSend = useCallback((currentTranscript: string) => {
     clearEndpointTimer();
@@ -354,8 +355,8 @@ export default function ChatbotScreen() {
     Keyboard.dismiss();
 
     // Send to Gemini
-    await sendMessage(textToSend);
-  }, [inputText, transcript, isGenerating, isRecording, sendMessage, stopSpeech, clearEndpointTimer, setVoiceRecordingActive]);
+    await sendMessage(textToSend, isMuted);
+  }, [inputText, transcript, isGenerating, isRecording, sendMessage, stopSpeech, clearEndpointTimer, setVoiceRecordingActive, isMuted]);
 
   // ─── End voice session (stop the hands-free loop) ────────────────────────────
 

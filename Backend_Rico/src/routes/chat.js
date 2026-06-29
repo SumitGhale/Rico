@@ -185,7 +185,7 @@ router.get("/chat/conversations/:conversationId/messages", requireAuth, async (r
 // ─── POST /chat/stream — Stream a Gemini response as NDJSON ──────────────────
 router.post("/chat/stream", requireAuth, async (req, res) => {
   try {
-    const { message, conversationId, timezone } = req.body;
+    const { message, conversationId, timezone, muted } = req.body;
 
     if (!message || typeof message !== "string" || !message.trim()) {
       return res.status(400).json({ error: "message is required" });
@@ -230,7 +230,7 @@ router.post("/chat/stream", requireAuth, async (req, res) => {
     let nextAudioSequence = 0;
 
     const queueSentenceAudio = (sentence) => {
-      if (clientDisconnected) return;
+      if (muted || clientDisconnected) return;
 
       const sequence = nextAudioSequence;
       nextAudioSequence += 1;

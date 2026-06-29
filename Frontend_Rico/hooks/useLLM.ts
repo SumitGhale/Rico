@@ -80,7 +80,7 @@ export function useLLM(options: UseLLMOptions = {}) {
   }, []);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, muted = false) => {
       const trimmedText = text.trim();
       if (!trimmedText) return;
 
@@ -143,6 +143,7 @@ export function useLLM(options: UseLLMOptions = {}) {
             message: trimmedText,
             conversationId,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            muted,
           }),
           signal: abortController.signal,
         });
