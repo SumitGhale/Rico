@@ -50,7 +50,7 @@ export default function ChatbotScreen() {
       headerLeft: () => (
         <TouchableOpacity
           onPress={() => setIsSidebarOpen(true)}
-          style={{ marginLeft: 15 }}
+          className="ml-[15px]"
         >
           <Ionicons name="menu" size={25} color="#374151" />
         </TouchableOpacity>
@@ -379,33 +379,17 @@ export default function ChatbotScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#ffffff" }}
+      className="flex-1 bg-white"
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       {/* Header with mute toggle and reset button */}
       {hasMessages && (
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            paddingHorizontal: 16,
-            paddingTop: 8,
-            paddingBottom: 4,
-          }}
-        >
+        <View className="flex-row justify-between items-center px-4 pt-2 pb-1">
           {/* Mute / Unmute toggle */}
           <TouchableOpacity
             onPress={toggleMute}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 16,
-              backgroundColor: isMuted ? "#fef2f2" : "#f0fdf4",
-            }}
+            className={`flex-row items-center px-3 py-1.5 rounded-2xl ${isMuted ? "bg-red-50" : "bg-green-50"}`}
           >
             <Ionicons
               name={isMuted ? "volume-mute" : "volume-high"}
@@ -413,18 +397,13 @@ export default function ChatbotScreen() {
               color={isMuted ? "#ef4444" : "#22c55e"}
             />
             <Text
-              style={{
-                fontSize: 12,
-                color: isMuted ? "#ef4444" : "#22c55e",
-                marginLeft: 4,
-                fontWeight: "500",
-              }}
+              className={`text-xs ml-1 font-medium ${isMuted ? "text-red-500" : "text-green-500"}`}
             >
               {isMuted ? "Muted" : "Voice on"}
             </Text>
           </TouchableOpacity>
 
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View className="flex-row items-center gap-2">
             {/* End voice session button (visible when hands-free loop is active) */}
             {voiceSessionActiveRef.current &&
               (isRecording || isGenerating || isPlaybackActive) && (
@@ -433,24 +412,10 @@ export default function ChatbotScreen() {
                     stopSpeech();
                     endVoiceSession();
                   }}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                    borderRadius: 16,
-                    backgroundColor: "#fef2f2",
-                  }}
+                  className="flex-row items-center px-3 py-1.5 rounded-2xl bg-red-50"
                 >
                   <Ionicons name="stop-circle" size={14} color="#ef4444" />
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: "#ef4444",
-                      marginLeft: 4,
-                      fontWeight: "500",
-                    }}
-                  >
+                  <Text className="text-xs text-red-500 ml-1 font-medium">
                     End voice
                   </Text>
                 </TouchableOpacity>
@@ -462,24 +427,10 @@ export default function ChatbotScreen() {
                 endVoiceSession();
                 resetChat();
               }}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 16,
-                backgroundColor: "#f3f4f6",
-              }}
+              className="flex-row items-center px-3 py-1.5 rounded-2xl bg-gray-100"
             >
               <Ionicons name="refresh" size={14} color="#6b7280" />
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: "#6b7280",
-                  marginLeft: 4,
-                  fontWeight: "500",
-                }}
-              >
+              <Text className="text-xs text-gray-500 ml-1 font-medium">
                 New chat
               </Text>
             </TouchableOpacity>
@@ -500,32 +451,18 @@ export default function ChatbotScreen() {
       {/* Chat Messages Area */}
       <ScrollView
         ref={scrollViewRef}
-        style={{ flex: 1, paddingHorizontal: 16 }}
-        contentContainerStyle={{ flexGrow: 1, paddingVertical: 16 }}
+        className="flex-1 px-4"
+        contentContainerClassName="grow py-4"
         keyboardShouldPersistTaps="handled"
       >
         {/* Empty state */}
         {!hasMessages && !isGenerating && (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <View className="flex-1 items-center justify-center">
             <Ionicons name="chatbubbles-outline" size={48} color="#d1d5db" />
-            <Text
-              style={{
-                color: "#9ca3af",
-                marginTop: 12,
-                fontSize: 16,
-                textAlign: "center",
-              }}
-            >
+            <Text className="text-gray-400 mt-3 text-base text-center">
               Start a conversation...
             </Text>
-            <Text
-              style={{
-                color: "#d1d5db",
-                marginTop: 4,
-                fontSize: 13,
-                textAlign: "center",
-              }}
-            >
+            <Text className="text-gray-300 mt-1 text-[13px] text-center">
               Type a message or tap the mic to speak
             </Text>
           </View>
@@ -565,24 +502,13 @@ export default function ChatbotScreen() {
 
       {/* Live transcript preview (shown while recording) */}
       {isRecording && transcript.length > 0 && (
-        <View
-          style={{
-            marginHorizontal: 16,
-            marginBottom: 4,
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            backgroundColor: "#f0fdf4",
-            borderRadius: 12,
-            borderLeftWidth: 3,
-            borderLeftColor: "#22c55e",
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Text style={{ fontSize: 12, color: "#16a34a", fontWeight: "600" }}>
+        <View className="mx-4 mb-1 px-[14px] py-2 bg-green-50 rounded-xl border-l-[3px] border-l-green-500">
+          <View className="flex-row items-center">
+            <Text className="text-xs text-green-600 font-semibold">
               Listening...
             </Text>
           </View>
-          <Text style={{ fontSize: 14, color: "#1f2937", marginTop: 2 }}>
+          <Text className="text-sm text-gray-800 mt-0.5">
             {transcript}
           </Text>
         </View>
@@ -590,45 +516,23 @@ export default function ChatbotScreen() {
 
       {/* Error Banner */}
       {error && (
-        <View style={{ backgroundColor: "#fef2f2", padding: 10, marginHorizontal: 16, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: "#fca5a5" }}>
-          <Text style={{ color: "#b91c1c", fontSize: 13, textAlign: "center", fontWeight: "500" }}>⚠️ {error}</Text>
+        <View className="bg-red-50 p-[10px] mx-4 mb-2 rounded-xl border border-red-300">
+          <Text className="text-red-700 text-[13px] text-center font-medium">⚠️ {error}</Text>
         </View>
       )}
 
       {modelError && (
-        <View style={{ backgroundColor: "#fff7ed", padding: 10, marginHorizontal: 16, marginBottom: 8, borderRadius: 12, borderWidth: 1, borderColor: "#fdba74" }}>
-          <Text style={{ color: "#c2410c", fontSize: 13, textAlign: "center", fontWeight: "500" }}>
+        <View className="bg-orange-50 p-[10px] mx-4 mb-2 rounded-xl border border-orange-300">
+          <Text className="text-orange-700 text-[13px] text-center font-medium">
             Speech model unavailable: {modelError}
           </Text>
         </View>
       )}
 
       {/* Input Area */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "flex-end",
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          marginBottom: 5,
-          borderTopWidth: 1,
-          borderTopColor: "#e5e7eb",
-          backgroundColor: "#ffffff",
-        }}
-      >
+      <View className="flex-row items-end px-4 py-3 mb-[5px] border-t border-gray-200 bg-white">
         <TextInput
-          style={{
-            flex: 1,
-            backgroundColor: "#f3f4f6",
-            borderRadius: 24,
-            paddingHorizontal: 20,
-            paddingTop: 12,
-            paddingBottom: 12,
-            fontSize: 16,
-            color: "#1f2937",
-            maxHeight: 128,
-            minHeight: 48,
-          }}
+          className="flex-1 bg-gray-100 rounded-3xl px-5 py-3 text-base text-gray-800 max-h-32 min-h-12"
           placeholder="Message..."
           placeholderTextColor="#9ca3af"
           value={inputText || transcript}
@@ -645,15 +549,7 @@ export default function ChatbotScreen() {
         {/* Stop button — ends recording & voice session (only visible while recording) */}
         {isRecording && (
           <TouchableOpacity
-            style={{
-              marginLeft: 8,
-              borderRadius: 24,
-              width: 48,
-              height: 48,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "#ef4444",
-            }}
+            className="ml-2 rounded-3xl w-12 h-12 items-center justify-center bg-red-500"
             onPress={endVoiceSession}
           >
             <Ionicons name="stop" size={20} color="white" />
@@ -662,19 +558,13 @@ export default function ChatbotScreen() {
 
         {/* Main action button: Send (has content) or Mic (empty) */}
         <TouchableOpacity
-          style={{
-            marginLeft: isRecording ? 8 : 12,
-            borderRadius: 24,
-            width: 48,
-            height: 48,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: isGenerating
-              ? "#9ca3af"
+          className={`rounded-3xl w-12 h-12 items-center justify-center ${isRecording ? "ml-2" : "ml-3"} ${
+            isGenerating
+              ? "bg-gray-400"
               : (initializingModel || voiceUnavailable || isPlaybackActive) && !hasContent
-                ? "#9ca3af"
-                : "#3b82f6",
-          }}
+                ? "bg-gray-400"
+                : "bg-blue-500"
+          }`}
           disabled={isGenerating || ((initializingModel || voiceUnavailable || isPlaybackActive) && !hasContent)}
           onPress={() => {
             if (hasContent) {

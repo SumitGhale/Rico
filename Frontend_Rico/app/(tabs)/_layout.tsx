@@ -22,6 +22,7 @@ export default function TabLayout() {
         name="index"
         options={{
           tabBarStyle: { display: 'none' },
+          headerTitle: '',
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Link href="/calendar" asChild>
