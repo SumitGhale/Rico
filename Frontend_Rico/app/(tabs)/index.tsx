@@ -5,6 +5,7 @@ import { ScheduleConfirmation } from "@/components/ScheduleConfirmation";
 import { ThinkingIndicator } from "@/components/ThinkingIndicator";
 import { UpdateConfirmation } from "@/components/UpdateConfirmation";
 import { useAudio } from "@/hooks/useAudio";
+import { useAuth } from "@/hooks/useAuth";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { useLLM } from "@/hooks/useLLM";
 import { useSpeech } from "@/hooks/useSpeech";
@@ -27,6 +28,20 @@ import {
 // ─── VAD Config ────────────────────────────────────────────────────────────────
 const ENDPOINT_STABILITY_MS = 1500;
 const MIN_TRANSCRIPT_LENGTH = 2;   // Don't auto-send single-char hallucinations
+
+// ─── Empty-state suggestion prompts ──────────────────────────────────────────────
+const SUGGESTIONS = [
+  { icon: "calendar-outline", label: "Schedule a dentist appointment" },
+  { icon: "refresh-outline", label: "Move my standup to 10 am" },
+  { icon: "time-outline", label: "Block focus time this week" },
+] as const;
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
 
 export default function ChatbotScreen() {
   const [inputText, setInputText] = useState("");
@@ -106,6 +121,12 @@ export default function ChatbotScreen() {
   // Text-to-Speech
   const { stop: stopSpeech } = useSpeech();
 
+  // Authenticated user (for the greeting on the empty state)
+  const { user } = useAuth();
+  const firstName =
+    user?.name?.trim().split(" ")[0] || user?.email?.split("@")[0] || "there";
+  const greeting = getGreeting();
+
   useEffect(() => {
     if (preferencesLoaded) {
       initializeWhisperModel(selectedModelId);
@@ -142,7 +163,6 @@ export default function ChatbotScreen() {
 
   // Auto-restart recording after TTS finishes (hands-free conversational loop)
   useEffect(() => {
-    console.log(Intl.DateTimeFormat().resolvedOptions().timeZone);
     // When TTS just finished AND we're in voice session mode AND not generating
     // IMPORTANT: also check isPlaybackActive to avoid the race where
     // isPlaying is still false while the audio is loading
@@ -358,6 +378,16 @@ export default function ChatbotScreen() {
     await sendMessage(textToSend, isMuted);
   }, [inputText, transcript, isGenerating, isRecording, sendMessage, stopSpeech, clearEndpointTimer, setVoiceRecordingActive, isMuted]);
 
+  // Send a tapped suggestion prompt from the empty state
+  const handleSuggestion = useCallback(
+    (text: string) => {
+      if (isGenerating) return;
+      stopSpeech();
+      sendMessage(text, isMuted);
+    },
+    [isGenerating, sendMessage, stopSpeech, isMuted]
+  );
+
   // ─── End voice session (stop the hands-free loop) ────────────────────────────
 
   const endVoiceSession = useCallback(() => {
@@ -379,7 +409,7 @@ export default function ChatbotScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
+      className="flex-1 bg-background"
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
@@ -457,14 +487,33 @@ export default function ChatbotScreen() {
       >
         {/* Empty state */}
         {!hasMessages && !isGenerating && (
-          <View className="flex-1 items-center justify-center">
-            <Ionicons name="chatbubbles-outline" size={48} color="#d1d5db" />
-            <Text className="text-gray-400 mt-3 text-base text-center">
-              Start a conversation...
+          <View className="flex-1 justify-center">
+            {/* Greeting */}
+            <Text
+              style={{ fontFamily: Platform.OS === "ios" ? "Georgia" : "serif" }}
+              className="text-4xl font-bold text-text"
+            >
+              {greeting}, {firstName}.
             </Text>
-            <Text className="text-gray-300 mt-1 text-[13px] text-center">
-              Type a message or tap the mic to speak
+            <Text
+              style={{ fontFamily: Platform.OS === "ios" ? "Georgia" : "serif" }}
+              className="text-4xl text-gray-400 mb-8"
+            >
+              What&apos;s on your plate?
             </Text>
+
+            {/* Suggestion cards */}
+            {SUGGESTIONS.map((s) => (
+              <TouchableOpacity
+                key={s.label}
+                onPress={() => handleSuggestion(s.label)}
+                className="flex-row items-center bg-white rounded-2xl border border-gray-200 px-4 py-4 mb-3"
+              >
+                <Ionicons name={s.icon} size={20} color="#ADEBB3" />
+                <Text className="flex-1 text-text text-base ml-3">{s.label}</Text>
+                <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
@@ -530,10 +579,10 @@ export default function ChatbotScreen() {
       )}
 
       {/* Input Area */}
-      <View className="flex-row items-end px-4 py-3 mb-[5px] border-t border-gray-200 bg-white">
+      <View className="flex-row items-end px-4 py-6 mb-[8px] bg-background">
         <TextInput
-          className="flex-1 bg-gray-100 rounded-3xl px-5 py-3 text-base text-gray-800 max-h-32 min-h-12"
-          placeholder="Message..."
+          className="flex-1 bg-white border border-gray-200 rounded-3xl px-5 py-3 text-base text-text max-h-32 min-h-12"
+          placeholder="Ask Rico anything..."
           placeholderTextColor="#9ca3af"
           value={inputText || transcript}
           onChangeText={(text) => {
@@ -560,10 +609,10 @@ export default function ChatbotScreen() {
         <TouchableOpacity
           className={`rounded-3xl w-12 h-12 items-center justify-center ${isRecording ? "ml-2" : "ml-3"} ${
             isGenerating
-              ? "bg-gray-400"
+              ? "bg-gray-200"
               : (initializingModel || voiceUnavailable || isPlaybackActive) && !hasContent
-                ? "bg-gray-400"
-                : "bg-blue-500"
+                ? "bg-gray-200"
+                : "bg-primary"
           }`}
           disabled={isGenerating || ((initializingModel || voiceUnavailable || isPlaybackActive) && !hasContent)}
           onPress={() => {
@@ -575,13 +624,13 @@ export default function ChatbotScreen() {
           }}
         >
           {isGenerating ? (
-            <ActivityIndicator size="small" color="white" />
+            <ActivityIndicator size="small" color="#2A2A2A" />
           ) : (initializingModel || isDownloading) && !hasContent ? (
-            <ActivityIndicator size="small" color="white" />
+            <ActivityIndicator size="small" color="#2A2A2A" />
           ) : hasContent ? (
-            <Ionicons name="send" size={20} color="white" style={{ marginLeft: 3 }} />
+            <Ionicons name="send" size={20} color="#2A2A2A" style={{ marginLeft: 3 }} />
           ) : (
-            <Ionicons name="mic" size={24} color="white" />
+            <Ionicons name="mic" size={24} color="#2A2A2A" />
           )}
         </TouchableOpacity>
       </View>

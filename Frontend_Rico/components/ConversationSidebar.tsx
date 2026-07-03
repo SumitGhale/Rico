@@ -25,6 +25,7 @@ export function ConversationSidebar({ isOpen, onClose, onSelectConversation }: P
   const [isVisible, setIsVisible] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const translateX = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
@@ -96,7 +97,7 @@ export function ConversationSidebar({ isOpen, onClose, onSelectConversation }: P
           position: 'absolute',
           top: 0, left: 0, bottom: 0,
           width: SIDEBAR_WIDTH,
-          backgroundColor: '#F7F3EC',
+          backgroundColor: '#fbfbfe',
           shadowColor: '#000',
           shadowOffset: { width: 4, height: 0 },
           shadowOpacity: 0.15,
@@ -108,9 +109,6 @@ export function ConversationSidebar({ isOpen, onClose, onSelectConversation }: P
         {/* Header */}
         <View className="flex-row items-center justify-between px-6 pb-6 pt-16">
           <Text className="text-4xl font-bold tracking-tight text-gray-900">Rico</Text>
-          <TouchableOpacity onPress={onClose} className="p-1">
-            <Ionicons name="close" size={24} color="#6b7280" />
-          </TouchableOpacity>
         </View>
 
         {/* Recents label */}
@@ -126,8 +124,9 @@ export function ConversationSidebar({ isOpen, onClose, onSelectConversation }: P
             conversations.map((conv) => (
               <TouchableOpacity
                 key={conv.id}
-                className="px-6 py-4 active:bg-stone-200"
+                className={`px-6 rounded-xl py-3  mx-2 ${selectedConversationId === conv.id ? 'bg-stone-200' : 'active:bg-stone-200'}`}
                 onPress={() => {
+                  setSelectedConversationId(conv.id);
                   onSelectConversation?.(conv.id);
                   onClose();
                 }}
