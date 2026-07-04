@@ -143,12 +143,12 @@ export function ConversationSidebar({ isOpen, onClose, onSelectConversation }: P
         {/* New chat button */}
         <View className="border-t border-gray-200 px-6 pb-12 pt-4">
           <TouchableOpacity
-            className="flex-row items-center justify-center gap-2 rounded-full bg-gray-900 py-4"
+            className="flex-row items-center justify-center gap-2 rounded-full bg-primary py-4"
             onPress={onClose}
             activeOpacity={0.8}
           >
-            <Ionicons name="add" size={20} color="white" />
-            <Text className="text-base font-semibold text-white">New chat</Text>
+            <Ionicons name="add" size={20} color="#2A2A2A"  />
+            <Text className="text-base font-bold text-text">New chat</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>

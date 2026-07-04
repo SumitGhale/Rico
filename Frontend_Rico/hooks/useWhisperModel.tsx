@@ -9,7 +9,12 @@ import React, {
     useRef,
     useState,
 } from "react";
-import { initWhisper, WhisperContext } from "whisper.rn/index.js";
+import {
+    initWhisper,
+    initWhisperVad,
+    WhisperContext,
+    WhisperVadContext,
+} from "whisper.rn/index.js";
 
 export interface WhisperModel {
     id: string;
@@ -27,6 +32,14 @@ export interface WhisperModel {
 
 export const DEFAULT_WHISPER_MODEL_ID = "ggml-base.en-q5_1";
 const SELECTED_MODEL_KEY = "rico_selected_whisper_model";
+
+// Silero VAD model used by RealtimeTranscriber for utterance endpointing.
+// Not part of WHISPER_MODELS so it never appears in the model picker.
+const VAD_MODEL = {
+    id: "ggml-silero-v5.1.2",
+    url: "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin",
+    filename: "ggml-silero-v5.1.2.bin",
+};
 
 export const WHISPER_MODELS: WhisperModel[] = [
     {
@@ -68,6 +81,7 @@ interface WhisperModelContextValue {
     selectedModelId: string;
     currentModelId: string | null;
     whisperContext: WhisperContext | null;
+    vadContext: WhisperVadContext | null;
     initializingModel: boolean;
     downloadingModelId: string | null;
     isDownloading: boolean;
@@ -101,11 +115,13 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
     const [selectedModelId, setSelectedModelId] = useState(DEFAULT_WHISPER_MODEL_ID);
     const [currentModelId, setCurrentModelId] = useState<string | null>(null);
     const [whisperContext, setWhisperContext] = useState<WhisperContext | null>(null);
+    const [vadContext, setVadContext] = useState<WhisperVadContext | null>(null);
     const [preferencesLoaded, setPreferencesLoaded] = useState(false);
     const [isRecordingActive, setIsRecordingActive] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const initializationPromiseRef = useRef<Promise<boolean> | null>(null);
     const initializationTargetRef = useRef<string | null>(null);
+    const vadInitStartedRef = useRef(false);
     const recordingActiveRef = useRef(false);
 
     const setVoiceRecordingActive = useCallback((active: boolean) => {
@@ -163,7 +179,15 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
         };
     }, [whisperContext]);
 
-    const getOrDownloadModel = useCallback(async (model: WhisperModel) => {
+    useEffect(() => {
+        return () => {
+            vadContext?.release().catch(console.warn);
+        };
+    }, [vadContext]);
+
+    const getOrDownloadModel = useCallback(async (
+        model: Pick<WhisperModel, "id" | "url" | "filename">,
+    ) => {
         const directory = getModelDirectory();
         const file = new File(directory, model.filename);
         setError(null);
@@ -205,6 +229,26 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
         }
     }, [getOrDownloadModel]);
 
+    // The VAD model is independent of the selected Whisper model: initialize it
+    // once and keep it across model switches. Failure is non-fatal — the chat
+    // screen falls back to transcript-stability endpointing without VAD.
+    const initializeVadContext = useCallback(async () => {
+        if (vadInitStartedRef.current) return;
+        vadInitStartedRef.current = true;
+        try {
+            const vadPath = await getOrDownloadModel(VAD_MODEL);
+            const nextVadContext = await initWhisperVad({
+                filePath: vadPath,
+                useGpu: true,
+            });
+            setVadContext(nextVadContext);
+            console.log("Whisper VAD context initialized");
+        } catch (vadError) {
+            vadInitStartedRef.current = false;
+            console.warn("Failed to initialize VAD context (voice endpointing degraded):", vadError);
+        }
+    }, [getOrDownloadModel]);
+
     const initializeWhisperModel = useCallback(async (modelId = selectedModelId) => {
         if (modelId === currentModelId && whisperContext) return true;
         if (recordingActiveRef.current) {
@@ -236,6 +280,7 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
                 setSelectedModelId(modelId);
                 await SecureStore.setItemAsync(SELECTED_MODEL_KEY, modelId);
                 console.log(`Whisper context initialized for ${modelId}`);
+                await initializeVadContext();
                 return true;
             } catch (initializationError) {
                 const message =
@@ -255,7 +300,7 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
         initializationTargetRef.current = modelId;
         initializationPromiseRef.current = initialization;
         return initialization;
-    }, [currentModelId, getOrDownloadModel, selectedModelId, whisperContext]);
+    }, [currentModelId, getOrDownloadModel, initializeVadContext, selectedModelId, whisperContext]);
 
     const deleteModel = useCallback(async (modelId: string) => {
         if (modelId === currentModelId) {
@@ -288,6 +333,7 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
         initializingModel,
         currentModelId,
         whisperContext,
+        vadContext,
         downloadingModelId,
         isDownloading: downloadingModelId !== null,
         preferencesLoaded,
@@ -309,6 +355,7 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
         refreshModelFiles,
         selectedModelId,
         setVoiceRecordingActive,
+        vadContext,
         whisperContext,
     ]);
 
