@@ -645,7 +645,7 @@ export default function ChatbotScreen() {
                 onPress={() => handleSuggestion(s.label)}
                 className="flex-row items-center bg-white rounded-2xl border border-gray-200 px-4 py-4 mb-3"
               >
-                <Ionicons name={s.icon} size={20} color="#ADEBB3" />
+                <Ionicons name={s.icon} size={20} color="#47d254" />
                 <Text className="flex-1 text-text text-base ml-3">{s.label}</Text>
                 <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
               </TouchableOpacity>
