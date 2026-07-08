@@ -154,3 +154,20 @@ export const getMe = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch user profile" });
   }
 };
+
+export const deleteMyAccount = async (req, res) => {
+  const userId = req.userId;
+  try {
+    // GoogleToken has no FK/cascade to User (its id is set to the userId), so
+    // remove it explicitly. deleteMany is a no-op if there's no token.
+    await prisma.googleToken.deleteMany({ where: { id: userId } });
+
+    // Deleting the user cascades to Account, Event, Conversation, ChatMessage.
+    await prisma.user.delete({ where: { id: userId } });
+
+    res.status(200).json({ message: "User account deleted successfully" });
+  } catch (error) {
+    console.error("Delete My Account error:", error);
+    res.status(500).json({ error: "Failed to delete user account" });
+  }
+};
