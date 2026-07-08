@@ -43,4 +43,4 @@ yarn-error.*
 
 # mac generated files
 .ds_Store
-
+.DS_Store

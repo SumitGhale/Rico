@@ -5,6 +5,7 @@ import chatRouter from "./routes/chat.js";
 import eventRouter from "./routes/event.js";
 import authRouter from "./routes/auth.js";
 import process from "node:process";
+import limiter from "../middleware/rateLimit.js";
 
 const port = process.env.PORT || 8000;
 
@@ -15,8 +16,8 @@ app.use(express.json());
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use("/api/auth", authRouter);
-app.use("/api", chatRouter);
-app.use("/api", eventRouter);
+app.use("/api", limiter, chatRouter);
+app.use("/api", limiter, eventRouter);
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 // if (process.env.NODE_ENV !== "production") {

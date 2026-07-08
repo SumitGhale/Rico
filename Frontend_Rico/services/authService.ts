@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { Alert } from "react-native";
 import { BACKEND_URL } from "@/constants/Gemini";
+import { throwIfRateLimited } from "@/services/apiError";
 
 const AUTH_BASE = `${BACKEND_URL}/api/auth`;
 const TOKEN_KEY = "rico_auth_token";
@@ -102,11 +103,14 @@ export async function register(
     body: JSON.stringify({ email, password, name }),
   });
 
-  const data = await res.json();
-
   if (!res.ok) {
+    // Rate-limit responses are plain text, so parse the body defensively.
+    throwIfRateLimited(res);
+    const data = await res.json().catch(() => ({}));
     throw new Error(data.error ?? "Registration failed");
   }
+
+  const data = await res.json();
 
   // Persist the token
   await saveToken(data.token);
@@ -126,11 +130,14 @@ export async function login(
     body: JSON.stringify({ email, password }),
   });
 
-  const data = await res.json();
-
   if (!res.ok) {
+    // Rate-limit responses are plain text, so parse the body defensively.
+    throwIfRateLimited(res);
+    const data = await res.json().catch(() => ({}));
     throw new Error(data.error ?? "Login failed");
   }
+
+  const data = await res.json();
 
   // Persist the token
   await saveToken(data.token);
@@ -149,6 +156,10 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
     const res = await fetch(`${AUTH_BASE}/me`, {
       headers,
     });
+
+    // A 429 says nothing about token validity — don't clear it, just surface it
+    // so the caller can back off rather than silently logging the user out.
+    throwIfRateLimited(res);
 
     if (!res.ok) {
       // Token is invalid or expired — clear it

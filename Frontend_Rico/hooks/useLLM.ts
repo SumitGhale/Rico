@@ -1,5 +1,6 @@
 import { BACKEND_URL } from "@/constants/Gemini";
 import { getAuthHeaders, handleUnauthorizedToken } from "@/services/authService";
+import { throwIfRateLimited } from "@/services/apiError";
 import { fetchConversationMessages } from "@/services/chatService";
 import type {
   ScheduleDelete,
@@ -150,6 +151,7 @@ export function useLLM(options: UseLLMOptions = {}) {
 
         if (!response.ok || !response.body) {
           if (response.status === 401) await handleUnauthorizedToken();
+          throwIfRateLimited(response);
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
             errorData.error || `Server error (${response.status})`
@@ -278,6 +280,7 @@ export function useLLM(options: UseLLMOptions = {}) {
       });
       if (!response.ok) {
         if (response.status === 401) await handleUnauthorizedToken();
+        throwIfRateLimited(response);
         throw new Error(`Server error (${response.status})`);
       }
       const data = await response.json();

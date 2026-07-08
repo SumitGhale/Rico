@@ -1,5 +1,6 @@
 import { BACKEND_URL } from "@/constants/Gemini";
 import { getAuthHeaders, handleUnauthorizedToken } from "@/services/authService";
+import { throwIfRateLimited } from "@/services/apiError";
 
 export interface Conversation {
   id: string;
@@ -20,6 +21,7 @@ const CHAT_URL = `${BACKEND_URL}/api/chat`;
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     if (res.status === 401) await handleUnauthorizedToken();
+    throwIfRateLimited(res);
     const body = await res.json().catch(() => ({}));
     throw new Error((body as any).error || `Server error (${res.status})`);
   }
