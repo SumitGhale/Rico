@@ -6,7 +6,6 @@ const limiter = rateLimit({
 	limit: 75, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
 	standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
 	legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-	ipv6Subnet: 56, // Set to 60 or 64 to be less aggressive, or 52 or 48 to be more aggressive
     keyGenerator: (req) => {
         // Prefer the authenticated user id; fall back to IP. Route the IP through
         // ipKeyGenerator so IPv6 addresses collapse to their /56 subnet (see ipv6Subnet

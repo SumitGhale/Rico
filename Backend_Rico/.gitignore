@@ -2,3 +2,5 @@
 node_modules/
 /generated/prisma
 credentials.json
+.ds_store
+.DS_Store

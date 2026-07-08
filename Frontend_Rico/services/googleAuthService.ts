@@ -1,6 +1,7 @@
 import * as AuthSession from "expo-auth-session";
 import { BACKEND_URL } from "@/constants/Gemini";
 import { getAuthHeaders, handleUnauthorizedToken } from "./authService";
+import { throwIfRateLimited } from "./apiError";
 
 const AUTH_BASE = `${BACKEND_URL}/api/auth`;  
 
@@ -50,6 +51,7 @@ export async function checkGoogleConnectionStatus(): Promise<boolean> {
     const res = await fetch(`${AUTH_BASE}/google/status`, { headers });
     if (!res.ok) {
       if (res.status === 401) await handleUnauthorizedToken();
+      throwIfRateLimited(res);
       return false;
     }
     const data: ConnectionStatus = await res.json();
@@ -116,6 +118,7 @@ export async function connectGoogleCalendar(): Promise<boolean> {
 
     if (!exchangeRes.ok) {
       if (exchangeRes.status === 401) await handleUnauthorizedToken();
+      throwIfRateLimited(exchangeRes);
       const errData = await exchangeRes.json().catch(() => ({}));
       throw new Error(errData.error ?? "Failed to exchange code for tokens");
     }

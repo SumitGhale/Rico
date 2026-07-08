@@ -1,5 +1,6 @@
 import { BACKEND_URL } from "@/constants/Gemini";
 import { getAuthHeaders, handleUnauthorizedToken } from "@/services/authService";
+import { throwIfRateLimited } from "@/services/apiError";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     // Token expired/invalid — clear it and trigger logout before surfacing the error.
     if (res.status === 401) await handleUnauthorizedToken();
+    throwIfRateLimited(res);
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Server error (${res.status})`);
   }
