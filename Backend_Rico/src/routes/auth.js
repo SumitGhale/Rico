@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { register, login, getMe } from "../controller/authController.js";
+import { register, login, getMe, deleteMyAccount } from "../controller/authController.js";
 import { requireAuth } from "../../middleware/authMiddleware.js";
 import { exchangeGoogleToken, getGoogleAuthStatus, disconnectGoogleAuth } from "../controller/googleauthcontroller.js";
 
@@ -9,6 +9,9 @@ const router = Router();
 router.post("/register", register);
 router.post("/login", login);
 router.get("/me", requireAuth, getMe);
+
+router.delete("/me", requireAuth, deleteMyAccount);
+
 
 // ─── Google Calendar OAuth ───────────────────────────────────────────────────
 router.post("/google/exchange", requireAuth, exchangeGoogleToken);

@@ -4,6 +4,7 @@ import {
   WHISPER_MODELS,
   useWhisperModel,
 } from "@/hooks/useWhisperModel";
+import { deleteMyAccount } from "@/services/authService";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -39,6 +40,7 @@ export default function ModalScreen() {
   const [selectingModelId, setSelectingModelId] = useState<string | null>(null);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     refreshModelFiles();
@@ -93,6 +95,29 @@ export default function ModalScreen() {
         },
       },
     ]);
+  };
+
+  const confirmDeleteAccount = () => {
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your account and all associated data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete account",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingAccount(true);
+            try {
+              await deleteMyAccount();
+              await logout();
+            } finally {
+              setDeletingAccount(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const actionsBlocked = initializingModel || selectingModelId !== null;
@@ -274,19 +299,39 @@ export default function ModalScreen() {
           )}
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Delete account"
+            disabled={deletingAccount}
+            onPress={confirmDeleteAccount}
+            className={`mb-3 min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl border border-red-300 bg-white px-3.5 ${
+              deletingAccount ? "opacity-40" : ""
+            }`}
+          >
+            {deletingAccount ? (
+              <ActivityIndicator size="small" color="#dc2626" />
+            ) : (
+              <>
+                <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                <Text className="text-sm font-bold text-red-600">
+                  Delete account
+                </Text>
+              </>
+            )}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
             accessibilityLabel="Log out"
             disabled={loggingOut}
             onPress={confirmLogout}
-            className={`min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 ${
+            className={`min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl bg-red-600 px-3.5 ${
               loggingOut ? "opacity-40" : ""
             }`}
           >
             {loggingOut ? (
-              <ActivityIndicator size="small" color="#dc2626" />
+              <ActivityIndicator size="small" color="#ffffff" />
             ) : (
               <>
-                <Ionicons name="log-out-outline" size={18} color="#dc2626" />
-                <Text className="text-sm font-bold text-red-600">Log out</Text>
+                <Ionicons name="log-out-outline" size={18} color="#ffffff" />
+                <Text className="text-sm font-bold text-white">Log out</Text>
               </>
             )}
           </Pressable>

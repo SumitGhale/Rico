@@ -174,6 +174,23 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
   }
 }
 
+export async function deleteMyAccount(): Promise<void> {
+  const headers = await getAuthHeaders();
+  if (!headers.Authorization) throw new Error("No auth token found");
+
+  const res = await fetch(`${AUTH_BASE}/me`, {
+    method: "DELETE",
+    headers,
+  });
+
+  if (!res.ok) {
+    // Rate-limit responses are plain text, so parse the body defensively.
+    throwIfRateLimited(res);
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? "Failed to delete account");
+  }
+}
+
 /**
  * Log out — clears the stored token.
  */
