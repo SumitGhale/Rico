@@ -189,9 +189,6 @@ export async function deleteMyAccount(): Promise<void> {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error ?? "Failed to delete account");
   }
-
-  // Clear the token after successful deletion
-  await clearToken();
 }
 
 /**
