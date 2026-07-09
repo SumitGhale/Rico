@@ -11,8 +11,7 @@ import { StyleSheet, Text, TextInput } from "react-native";
  * This patches the render of Text/TextInput once so each element gets the
  * Poppins family that matches its resolved `fontWeight` (from NativeWind
  * classes like `font-bold` or inline `fontWeight` styles). Elements that set an
- * explicit `fontFamily` (e.g. the SpaceMono MonoText or the serif greeting) are
- * left untouched.
+ * explicit `fontFamily` (e.g. the serif greeting) are left untouched.
  */
 function familyForWeight(weight?: string | number): string {
   const w = String(weight ?? "400");
@@ -31,7 +30,7 @@ function patch(Component: any) {
   Component.render = function (props: any, ref: any) {
     const flat = StyleSheet.flatten(props.style) || {};
 
-    // Respect any explicitly chosen font (SpaceMono, serif, etc.)
+    // Respect any explicitly chosen font (serif, etc.)
     if (flat.fontFamily) {
       return original.call(this, props, ref);
     }
