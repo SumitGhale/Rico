@@ -8,7 +8,6 @@ import { useAudio } from "@/hooks/useAudio";
 import { useAuth } from "@/hooks/useAuth";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import { useLLM } from "@/hooks/useLLM";
-import { useSpeech } from "@/hooks/useSpeech";
 import { useWhisperModel } from "@/hooks/useWhisperModel";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -140,9 +139,6 @@ export default function ChatbotScreen() {
   // Calendar events (shared with Calendar screen)
   const { addEvents, updateEvents, deleteEvents } = useCalendarEvents();
 
-  // Text-to-Speech
-  const { stop: stopSpeech } = useSpeech();
-
   // Authenticated user (for the greeting on the empty state)
   const { user } = useAuth();
   const firstName =
@@ -183,7 +179,6 @@ export default function ChatbotScreen() {
         transcriberRef.current = null;
       }
       setVoiceRecordingActive(false);
-      stopSpeech();
       cancelGeneration();
       clearAudioQueue();
     };
@@ -192,7 +187,6 @@ export default function ChatbotScreen() {
     clearAudioQueue,
     clearVoiceTimers,
     setVoiceRecordingActive,
-    stopSpeech,
   ]);
 
   // The provider releases a replaced WhisperContext as soon as a new one is
@@ -442,8 +436,8 @@ export default function ChatbotScreen() {
   }, [whisperContext, vadContext]);
 
   const startRealtimeTranscribtion = async () => {
-    // Stop any active speech when user starts recording
-    stopSpeech();
+    // Stop any active TTS playback when user starts recording
+    clearAudioQueue();
     const isPermissionGranted = await checkRecordingPermission();
     if (!isPermissionGranted) return;
 
@@ -490,8 +484,8 @@ export default function ChatbotScreen() {
    * Handle sending a message — stops recording if active, then sends.
    */
   const handleSend = useCallback(async () => {
-    // Stop any active speech
-    stopSpeech();
+    // Stop any active TTS playback
+    clearAudioQueue();
 
     // Stop recording first if active
     if (isRecording) {
@@ -512,16 +506,16 @@ export default function ChatbotScreen() {
 
     // Send to Gemini
     await sendMessage(textToSend, isMuted);
-  }, [inputText, transcript, isGenerating, isRecording, sendMessage, stopSpeech, stopTranscriber, isMuted]);
+  }, [inputText, transcript, isGenerating, isRecording, sendMessage, clearAudioQueue, stopTranscriber, isMuted]);
 
   // Send a tapped suggestion prompt from the empty state
   const handleSuggestion = useCallback(
     (text: string) => {
       if (isGenerating) return;
-      stopSpeech();
+      clearAudioQueue();
       sendMessage(text, isMuted);
     },
-    [isGenerating, sendMessage, stopSpeech, isMuted]
+    [isGenerating, sendMessage, clearAudioQueue, isMuted]
   );
 
   // ─── End voice session (stop the hands-free loop) ────────────────────────────
@@ -575,7 +569,7 @@ export default function ChatbotScreen() {
               (isRecording || isGenerating || isPlaybackActive) && (
                 <TouchableOpacity
                   onPress={() => {
-                    stopSpeech();
+                    clearAudioQueue();
                     endVoiceSession();
                   }}
                   className="flex-row items-center px-3 py-1.5 rounded-2xl bg-red-50"
@@ -589,7 +583,7 @@ export default function ChatbotScreen() {
 
             <TouchableOpacity
               onPress={() => {
-                stopSpeech();
+                clearAudioQueue();
                 endVoiceSession();
                 resetChat();
               }}
