@@ -754,13 +754,13 @@ export default function ChatbotScreen() {
           }}
         >
           {isGenerating ? (
-            <ActivityIndicator size="small" color="#2A2A2A" />
+            <ActivityIndicator size="small" color="white" />
           ) : (initializingModel || isDownloading) && !hasContent ? (
-            <ActivityIndicator size="small" color="#2A2A2A" />
+            <ActivityIndicator size="small" color="white" />
           ) : hasContent ? (
-            <Ionicons name="send" size={20} color="#2A2A2A" style={{ marginLeft: 3 }} />
+            <Ionicons name="send" size={20} color="white" style={{ marginLeft: 3 }} />
           ) : (
-            <Ionicons name="mic" size={24} color="#2A2A2A" />
+            <Ionicons name="mic" size={24} color="white" />
           )}
         </TouchableOpacity>
       </View>

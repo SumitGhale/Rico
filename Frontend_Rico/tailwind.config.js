@@ -9,7 +9,7 @@ module.exports = {
         sans: ["Poppins_400Regular"],
       },
       colors: {
-        primary: "#AFEEEE",
+        primary: "#0380FB",
         secondary: "#47d254",
         background: "#fbfbfe",
         text: "#2A2A2A",
