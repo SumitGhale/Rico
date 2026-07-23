@@ -48,11 +48,11 @@ async function createChat() {
     config: { systemInstruction: CATEGORIZATION_SYSTEM_PROMPT },
   });
 }
-export async function categorizeEvent(eventTitle = "Gym workout & cardio") {
+export async function categorizeEvent(eventTitle) {
   const chat = await createChat();
   const response = await chat.sendMessage({
     message: eventTitle,
   });
-  console.log(response.text); // should output: exercise
+  console.log(response.text); 
   return response.text;
 }
