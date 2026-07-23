@@ -5,11 +5,13 @@ import {
   updateGoogleCalendarEvent,
   deleteGoogleCalendarEvent,
 } from "../services/googleCalendarService.js";
+import { addUserPreference } from "./preferenceController.js";
 
 // ─── Create Event ────────────────────────────────────────────────────────────
 export const createEvent = async (req, res) => {
   try {
     const { title, start, end, color } = req.body;
+    const userId = req.userId; 
 
     if (!title || !start || !end) {
       return res.status(400).json({ error: "title, start, and end are required" });
@@ -41,11 +43,16 @@ export const createEvent = async (req, res) => {
       });
     }
 
+    // 4. Add user preference
+    await addUserPreference(userId, title, start, end);
+
     res.status(201).json(event);
   } catch (err) {
     console.error("Create event error:", err);
     res.status(500).json({ error: err?.message || "Failed to create event" });
   }
+
+  
 };
 
 // ─── Get All Events ──────────────────────────────────────────────────────────

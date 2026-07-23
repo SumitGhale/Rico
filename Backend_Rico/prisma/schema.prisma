@@ -13,14 +13,15 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  name          String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  accounts      Account[]
-  events        Event[]
-  conversations Conversation[]
+  id             String          @id @default(cuid())
+  email          String          @unique
+  name           String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  accounts       Account[]
+  events         Event[]
+  conversations  Conversation[]
+  categoryEvents CategoryEvent[]
 }
 
 model Account {
@@ -80,3 +81,16 @@ model ChatMessage {
 
   @@index([conversationId, createdAt])
 }
+
+model CategoryEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  category   String   // e.g. "fitness", "side_project", "meals_lunch"
+  duration   Int       // in minutes
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, category, createdAt])
+}
+
