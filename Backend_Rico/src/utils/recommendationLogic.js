@@ -40,5 +40,3 @@ export async function getRecommendedDuration(userId, category) {
   }
 }
 
-const recommendedDuration = await getRecommendedDuration("cmoskgwub0000kssxmwr1nl0e", "exercise");
-console.log(`Recommended duration for userId: cmoskgwub0000kssxmwr1nl0e and category: exercise is ${recommendedDuration}`);

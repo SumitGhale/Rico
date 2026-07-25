@@ -7,47 +7,58 @@ import { prisma } from "../../lib/prisma.ts";
  */
 export async function addUserPreference(userId, eventTitle, start, end) {
   const duration = (new Date(end) - new Date(start)) / (1000 * 60); // duration in minutes
+  let categories = [];
   try {
-    const category = await categorizeEvent(eventTitle);
+    categories = await categorizeEvent(eventTitle);
   } catch (error) {
     console.error("Error categorizing event:", error);
     throw new Error("Failed to categorize event");
   }
 
-  // Use a Prisma transaction to perform creation and max-5 cleanup atomically (all-or-nothing - prisma transaction combines multiple queries into a single transaction and ensures that either all succeed or fall back if any fail)
+  if (!categories || categories.length === 0) {
+    return [];
+  }
+
+  // Use a Prisma transaction to perform creation and max-5 cleanup atomically per category
   try {
-    const addedPreference = await prisma.$transaction(async (tx) => {
-      // 1. Create the new preference record
-      const newEntry = await tx.categoryEvent.create({
-        data: {
-          userId,
-          category,
-          duration,
-        },
-      });
+    const addedPreferences = await prisma.$transaction(async (tx) => {
+      const createdEntries = [];
 
-      // 2. Fetch all preferences for this user + category, ordered newest to oldest
-      const preferences = await tx.categoryEvent.findMany({
-        where: { userId, category },
-        orderBy: { createdAt: "desc" },
-        select: { id: true },
-      });
-
-      // 3. Keep top 5 newest entries; delete any 6th+ older entries
-      if (preferences.length > 5) {
-        const idsToDelete = preferences.slice(5).map((p) => p.id);
-        await tx.categoryEvent.deleteMany({
-          where: { id: { in: idsToDelete } },
+      for (const cat of categories) {
+        // 1. Create the new preference record for this category
+        const newEntry = await tx.categoryEvent.create({
+          data: {
+            userId,
+            category: cat,
+            duration,
+          },
         });
+
+        // 2. Fetch all preferences for this user + category, ordered newest to oldest
+        const preferences = await tx.categoryEvent.findMany({
+          where: { userId, category: cat },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        });
+
+        // 3. Keep top 5 newest entries; delete any 6th+ older entries
+        if (preferences.length > 5) {
+          const idsToDelete = preferences.slice(5).map((p) => p.id);
+          await tx.categoryEvent.deleteMany({
+            where: { id: { in: idsToDelete } },
+          });
+        }
+
+        createdEntries.push(newEntry);
       }
 
-      return newEntry;
+      return createdEntries;
     });
 
-    return addedPreference;
+    return addedPreferences;
   } catch (error) {
-    console.error("Error adding user preference:", error);
-    throw new Error("Failed to add user preference");
+    console.error("Error adding user preferences:", error);
+    throw new Error("Failed to add user preferences");
   }
 }
 
@@ -61,7 +72,6 @@ export async function getUserPreferences(userId, category) {
       where: { userId, category },
       orderBy: { createdAt: "desc" },
     });
-    console.log(preferences); // Log the preferences for debugging
     return preferences;
   } catch (error) {
     console.error("Error fetching user preferences:", error);

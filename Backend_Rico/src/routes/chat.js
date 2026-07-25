@@ -7,6 +7,7 @@ import {
   createTaskLimiter,
   extractCompleteSentences,
 } from "../utils/chatStream.js";
+import { getPromptRecommendationsContext } from "../utils/eventCategorisation.js";
 
 const router = Router();
 const API_KEY = process.env.TTS_API_KEY;
@@ -53,7 +54,11 @@ function sendStreamEvent(res, event) {
   }
 }
 
-async function findOwnedConversation(conversationId, userId, includeMessages = false) {
+async function findOwnedConversation(
+  conversationId,
+  userId,
+  includeMessages = false,
+) {
   if (!conversationId) return null;
 
   return prisma.conversation.findFirst({
@@ -165,22 +170,26 @@ router.post("/chat/conversations", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/chat/conversations/:conversationId/messages", requireAuth, async (req, res) => {
-  try {
-    const conversation = await findOwnedConversation(
-      req.params.conversationId,
-      req.userId,
-      true
-    );
-    if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
+router.get(
+  "/chat/conversations/:conversationId/messages",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const conversation = await findOwnedConversation(
+        req.params.conversationId,
+        req.userId,
+        true,
+      );
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      res.json(conversation.messages.map(toClientMessage));
+    } catch (err) {
+      console.error("Load messages error:", err);
+      res.status(500).json({ error: "Failed to load messages" });
     }
-    res.json(conversation.messages.map(toClientMessage));
-  } catch (err) {
-    console.error("Load messages error:", err);
-    res.status(500).json({ error: "Failed to load messages" });
-  }
-});
+  },
+);
 
 // ─── POST /chat/stream — Stream a Gemini response as NDJSON ──────────────────
 router.post("/chat/stream", requireAuth, async (req, res) => {
@@ -193,7 +202,11 @@ router.post("/chat/stream", requireAuth, async (req, res) => {
 
     let conversation;
     if (conversationId) {
-      conversation = await findOwnedConversation(conversationId, req.userId, true);
+      conversation = await findOwnedConversation(
+        conversationId,
+        req.userId,
+        true,
+      );
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
       }
@@ -216,9 +229,25 @@ router.post("/chat/stream", requireAuth, async (req, res) => {
     });
 
     const trimmedMessage = message.trim();
-    const currentChat = await createChat(req.userId, conversation.messages, timezone);
+    // 1. Obtain duration recommendations for user's prompt categories
+    const recommendationContext = await getPromptRecommendationsContext(
+      req.userId,
+      trimmedMessage,
+    );
+    // 2. Append context to user message for model prompt (without polluting stored DB message)
+    const augmentedMessage = recommendationContext
+      ? `${trimmedMessage}\n\n${recommendationContext}`
+      : trimmedMessage;
+
+    console.log(`Augmented Message: ${augmentedMessage}`);
+
+    const currentChat = await createChat(
+      req.userId,
+      conversation.messages,
+      timezone,
+    );
     const stream = await currentChat.sendMessageStream({
-      message: trimmedMessage,
+      message: augmentedMessage,
     });
 
     const scheduleParser = createScheduleStreamParser();
@@ -291,9 +320,12 @@ router.post("/chat/stream", requireAuth, async (req, res) => {
       sentenceBuffer = "";
     }
 
-    const scheduleEvents = parseJsonBlock(fullText, SCHEDULE_REGEX, "SCHEDULE_READY") ?? undefined;
-    const scheduleUpdates = parseJsonBlock(fullText, UPDATE_REGEX, "SCHEDULE_UPDATE") ?? undefined;
-    const scheduleDeletes = parseJsonBlock(fullText, DELETE_REGEX, "SCHEDULE_DELETE") ?? undefined;
+    const scheduleEvents =
+      parseJsonBlock(fullText, SCHEDULE_REGEX, "SCHEDULE_READY") ?? undefined;
+    const scheduleUpdates =
+      parseJsonBlock(fullText, UPDATE_REGEX, "SCHEDULE_UPDATE") ?? undefined;
+    const scheduleDeletes =
+      parseJsonBlock(fullText, DELETE_REGEX, "SCHEDULE_DELETE") ?? undefined;
     displayText = displayText.trim();
     const title = conversation.title || trimmedMessage.slice(0, 80);
 

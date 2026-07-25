@@ -107,7 +107,6 @@ export function MonthlyCalendarView({ events, onDayPress }: MonthlyCalendarViewP
           textMonthFontSize: 17,
           textDayFontSize: 15,
           textDayHeaderFontSize: 13,
-          textDayHeaderFontColor: '#9ca3af',
         }}
       />
 
