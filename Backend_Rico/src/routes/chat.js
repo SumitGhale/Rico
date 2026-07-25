@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { ai, GEMINI_MODEL, getSystemInstruction } from "../config/gemini.js";
-import { requireAuth } from "../../middleware/authMiddleware.js";
 import { prisma } from "../../lib/prisma.ts";
 import {
   createScheduleStreamParser,
@@ -8,6 +7,7 @@ import {
   extractCompleteSentences,
 } from "../utils/chatStream.js";
 import { getPromptRecommendationsContext } from "../utils/eventCategorisation.js";
+import { aiLimiter, generalApiLimiter } from "../../middleware/rateLimit.js";
 
 const router = Router();
 const API_KEY = process.env.TTS_API_KEY;
@@ -146,7 +146,7 @@ const synthesizeSpeech = async (text) => {
 };
 
 // ─── Conversation Routes ─────────────────────────────────────────────────────
-router.get("/chat/conversations", requireAuth, async (req, res) => {
+router.get("/chat/conversations", generalApiLimiter, async (req, res) => {
   try {
     const conversations = await prisma.conversation.findMany({
       where: { userId: req.userId },
@@ -160,7 +160,7 @@ router.get("/chat/conversations", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/chat/conversations", requireAuth, async (req, res) => {
+router.post("/chat/conversations", generalApiLimiter, async (req, res) => {
   try {
     const conversation = await createConversation(req.userId);
     res.status(201).json(conversation);
@@ -172,7 +172,7 @@ router.post("/chat/conversations", requireAuth, async (req, res) => {
 
 router.get(
   "/chat/conversations/:conversationId/messages",
-  requireAuth,
+  generalApiLimiter,
   async (req, res) => {
     try {
       const conversation = await findOwnedConversation(
@@ -192,7 +192,7 @@ router.get(
 );
 
 // ─── POST /chat/stream — Stream a Gemini response as NDJSON ──────────────────
-router.post("/chat/stream", requireAuth, async (req, res) => {
+router.post("/chat/stream", aiLimiter, async (req, res) => {
   try {
     const { message, conversationId, timezone, muted } = req.body;
 
@@ -386,7 +386,7 @@ router.post("/chat/stream", requireAuth, async (req, res) => {
 });
 
 // Keep the old endpoint compatible while making reset create a durable thread.
-router.delete("/chat/reset", requireAuth, async (req, res) => {
+router.delete("/chat/reset", generalApiLimiter, async (req, res) => {
   try {
     const conversation = await createConversation(req.userId);
     res.json({ success: true, conversationId: conversation.id });
