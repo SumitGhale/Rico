@@ -44,7 +44,7 @@ const CATEGORIZATION_SYSTEM_PROMPT = `
     "Gym workout & cardio" -> ["exercise"]
     "Team sync with engineering" -> ["work"]
     "Grocery shopping at Trader Joe's" -> ["shopping"]             
-    "Dinner with parents" -> ["family", "personal"]
+    "Dinner with parents" -> ["family", "social"]
     "Doctor appointment" -> ["health"]
     "Gym workout and team health checkup" -> ["exercise", "work",  
   "health"]
@@ -65,7 +65,20 @@ export async function categorizeEvent(eventTitle) {
   const text = (response.text || "").replace(/```json|```/g, "").trim();
   try {
     const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    // Remove duplicates and filter out invalid categories.
+    return [
+      ...new Set(
+        parsed.filter(
+          (category) =>
+            typeof category === "string" &&
+            EVENT_CATEGORIES.includes(category),
+        ),
+      ),
+    ];
   } catch {
     return [];
   }

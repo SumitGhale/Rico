@@ -1,4 +1,7 @@
-import { categorizeEvent } from "../utils/eventCategorisation.js";
+import {
+  categorizeEvent,
+  EVENT_CATEGORIES,
+} from "../utils/eventCategorisation.js";
 import { prisma } from "../../lib/prisma.ts";
 
 /**
@@ -25,6 +28,13 @@ export async function addUserPreference(userId, eventTitle, start, end) {
       const createdEntries = [];
 
       for (const cat of categories) {
+        // Validate category against predefined list
+        if (!EVENT_CATEGORIES.includes(cat)) {
+          console.warn(
+            `Category "${cat}" is not in the predefined list. Skipping.`,
+          );
+          continue;
+        }
         // 1. Create the new preference record for this category
         const newEntry = await tx.categoryEvent.create({
           data: {

@@ -11,10 +11,12 @@ import { addUserPreference } from "./preferenceController.js";
 export const createEvent = async (req, res) => {
   try {
     const { title, start, end, color } = req.body;
-    const userId = req.userId; 
+    const userId = req.userId;
 
     if (!title || !start || !end) {
-      return res.status(400).json({ error: "title, start, and end are required" });
+      return res
+        .status(400)
+        .json({ error: "title, start, and end are required" });
     }
 
     // 1. Create the event locally in the DB
@@ -43,16 +45,17 @@ export const createEvent = async (req, res) => {
       });
     }
 
-    // 4. Add user preference
-    await addUserPreference(userId, title, start, end);
+    try {
+      await addUserPreference(userId, title, start, end);
+    } catch (error) {
+      console.warn("Preference learning failed:", error);
+    }
 
     res.status(201).json(event);
   } catch (err) {
     console.error("Create event error:", err);
     res.status(500).json({ error: err?.message || "Failed to create event" });
   }
-
-  
 };
 
 // ─── Get All Events ──────────────────────────────────────────────────────────
@@ -76,18 +79,16 @@ export const getAllEvents = async (req, res) => {
     // 3. Deduplicate: remove Google events that already exist locally
     //    (matched by googleEventId on the local event)
     const localGoogleIds = new Set(
-      localEvents
-        .filter((e) => e.googleEventId)
-        .map((e) => e.googleEventId)
+      localEvents.filter((e) => e.googleEventId).map((e) => e.googleEventId),
     );
 
     const uniqueGoogleEvents = googleEvents.filter(
-      (ge) => !localGoogleIds.has(ge.googleCalendarId)
+      (ge) => !localGoogleIds.has(ge.googleCalendarId),
     );
 
     // 4. Merge and sort by start time
     const merged = [...taggedLocal, ...uniqueGoogleEvents].sort(
-      (a, b) => new Date(a.start) - new Date(b.start)
+      (a, b) => new Date(a.start) - new Date(b.start),
     );
 
     res.json(merged);
