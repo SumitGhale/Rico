@@ -239,8 +239,6 @@ router.post("/chat/stream", aiLimiter, async (req, res) => {
       ? `${trimmedMessage}\n\n${recommendationContext}`
       : trimmedMessage;
 
-    console.log(`Augmented Message: ${augmentedMessage}`);
-
     const currentChat = await createChat(
       req.userId,
       conversation.messages,

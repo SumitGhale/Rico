@@ -1,4 +1,4 @@
-import { getUserPreferences } from "../controller/preferenceController.js";
+import { getUserPreferences } from "../services/preferenceService.js";
 
 /**
  * Calculates the mode (most frequent duration) from an array of CategoryEvent objects.
@@ -28,15 +28,12 @@ export async function getRecommendedDuration(userId, category) {
   const preferences = await getUserPreferences(userId, category);
 
   if (!preferences || preferences.length === 0) {
-    // When no preferences found
-    console.log(`No preferences found for userId: ${userId} and category: ${category}`);
     return null;
-  } else if (preferences.length < 5) {
-    // When preferences are less than 5, use the most recent preference duration
-    return preferences[0].duration;
-  } else {
-    // When preferences equal 5, calculate and return the mode of the durations
-    return getDurationMode(preferences);
   }
-}
 
+  if (preferences.length < 5) {
+    return preferences[0].duration;
+  }
+
+  return getDurationMode(preferences);
+}

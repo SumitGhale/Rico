@@ -89,31 +89,39 @@ export async function categorizeEvent(eventTitle) {
     all detected categories.                                              
 */
 export async function getPromptRecommendationsContext(userId, userPrompt) {
-  // 1. Get array of categories from user prompt using existing categorizer;
-  const categories = await categorizeEvent(userPrompt);
+  try {
+    const categories = await categorizeEvent(userPrompt);
 
-  if (!categories || categories.length === 0) {
+    if (categories.length === 0) {
+      return null;
+    }
+
+    const results = await Promise.all(
+      categories.map(async (category) => {
+        const duration = await getRecommendedDuration(userId, category);
+        return duration ? { category, duration } : null;
+      }),
+    );
+
+    const validRecommendations = results.filter(Boolean);
+    if (validRecommendations.length === 0) {
+      return null;
+    }
+
+    const lines = validRecommendations.map(
+      (recommendation) =>
+        `- ${recommendation.category}: ~${recommendation.duration} mins`,
+    );
+
+    return `[System Note — Historical User Duration Preferences:
+    ${lines.join("\n")}
+    Consider these durations when estimating times and building the
+  schedule.]`;
+  } catch (error) {
+    console.warn(
+      "Duration recommendation lookup failed; continuing without it:",
+      error,
+    );
     return null;
   }
-
-  // 2. Fetch recommended durations for all categories concurrently
-  const results = await Promise.all(
-    categories.map(async (category) => {
-      const duration = await getRecommendedDuration(userId, category);
-      return duration ? { category, duration } : null;
-    }),
-  );
-
-  const validRecommendations = results.filter(Boolean);
-  if (validRecommendations.length === 0) return null;
-
-  // 3. Format recommendations into a system note context string
-  const lines = validRecommendations.map(
-    (r) => `- ${r.category}: ~${r.duration} mins`,
-  );
-
-  return `[System Note — Historical User Duration Preferences:      
-    ${lines.join("\n")}
-    Consider these durations when estimating times and building the     
-  schedule.]`;
 }
