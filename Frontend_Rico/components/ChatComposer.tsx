@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import * as Haptics from "expo-haptics";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   TextInput,
   TouchableOpacity,
   View,
@@ -39,6 +41,7 @@ export function ChatComposer({
   onStartRecording,
   onEndVoiceSession,
 }: ChatComposerProps) {
+  const [shouldAutoFocus, setShouldAutoFocus] = useState(true);
   const hasContent = inputText.trim().length > 0;
   const isTranscribing = voicePhase === "transcribing";
   const isVoiceStatusVisible = voicePhase !== "idle";
@@ -46,6 +49,12 @@ export function ChatComposer({
     (isPreparingVoice || voiceUnavailable || isPlaybackActive) && !hasContent;
   const actionDisabled =
     isGenerating || isTranscribing || voiceActionUnavailable;
+
+  const handleStartRecording = () => {
+    Keyboard.dismiss();
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+    onStartRecording();
+  };
 
   return (
     <View className="mb-[8px] flex-row items-end bg-background px-4 py-6">
@@ -60,6 +69,8 @@ export function ChatComposer({
           placeholderTextColor="#9ca3af"
           value={inputText}
           onChangeText={onChangeText}
+          autoFocus={shouldAutoFocus}
+          onFocus={() => setShouldAutoFocus(false)}
           multiline
           editable={!isGenerating}
         />
@@ -85,7 +96,7 @@ export function ChatComposer({
             : "bg-primary"
         }`}
         disabled={actionDisabled}
-        onPress={hasContent ? onSend : onStartRecording}
+        onPress={hasContent ? onSend : handleStartRecording}
         accessibilityRole="button"
         accessibilityLabel={
           isTranscribing
