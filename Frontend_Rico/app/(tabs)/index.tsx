@@ -309,8 +309,6 @@ export default function ChatbotScreen() {
     utteranceSubmittedRef.current = false;
     pcmChunksRef.current = [];
 
-    let lastVadLogAt = 0;
-
     try {
       const vad = new RingBufferVad(vadContext, {
         vadPreset: "default",
@@ -319,32 +317,27 @@ export default function ChatbotScreen() {
         logger: __DEV__ ? console.log : undefined,
       });
       vad.onSpeechStart((_confidence, preRollAudio) => {
-        console.log("🗣️ Speech started", new Date().toISOString(), {
-          _confidence,
-        });
+        // console.log("🗣️ Speech started", new Date().toISOString(), {
+        //   _confidence,
+        // });
         if (!utteranceSubmittedRef.current)
           pcmChunksRef.current = [preRollAudio];
       });
       vad.onSpeechContinue((_confidence, audio) => {
-        const now = performance.now();
+        // const now = performance.now();
         // Avoid printing every audio chunk
-        if (now - lastVadLogAt >= 500) {
-          lastVadLogAt = now;
-          console.log("🎙️ VAD continues", new Date().toISOString(), {
-            _confidence,
-          });
-          if (!utteranceSubmittedRef.current) pcmChunksRef.current.push(audio);
-        }
+        // if (now - lastVadLogAt >= 500) {
+        //   lastVadLogAt = now;
+        //   console.log("🎙️ VAD continues", new Date().toISOString(), {
+        //     _confidence,
+        //   });
+        // }
+        if (!utteranceSubmittedRef.current) pcmChunksRef.current.push(audio);
       });
       vad.onSpeechEnd((_confidence) => {
-        console.log("🛑 Speech ended", new Date().toISOString(), {
-          _confidence,
-        });
-
-        console.log(
-          "🛑 Speech ended; microphone capture is stopping.",
-          new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-        );
+        // console.log("🛑 Speech ended", new Date().toISOString(), {
+        //   _confidence,
+        // });
         voiceHandlersRef.current.onSpeechEnd();
       });
       vad.onError((error) => console.warn("VAD error:", error));
