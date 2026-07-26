@@ -1,9 +1,11 @@
+import { ChatComposer } from "@/components/ChatComposer";
 import { ConversationSidebar } from "@/components/ConversationSidebar";
 import { DeleteConfirmation } from "@/components/DeleteConfirmation";
 import { MessageBubble } from "@/components/MessageBubble";
 import { ScheduleConfirmation } from "@/components/ScheduleConfirmation";
 import { ThinkingIndicator } from "@/components/ThinkingIndicator";
 import { UpdateConfirmation } from "@/components/UpdateConfirmation";
+import type { VoicePhase } from "@/components/VoiceStatusIndicator";
 import { useAudio } from "@/hooks/useAudio";
 import { useAuth } from "@/hooks/useAuth";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
@@ -28,7 +30,6 @@ import {
   Platform,
   ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -53,8 +54,8 @@ function getGreeting() {
 
 export default function ChatbotScreen() {
   const [inputText, setInputText] = useState("");
-  const [isFocused, setIsFocused] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
   const scrollViewRef = useRef<ScrollView>(null);
   const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -237,6 +238,7 @@ export default function ChatbotScreen() {
   const transcribeAndSend = useCallback(async () => {
     if (utteranceSubmittedRef.current || !whisperContext) return;
     utteranceSubmittedRef.current = true;
+    setVoicePhase("transcribing");
     await stopVoiceCapture();
 
     const chunks = pcmChunksRef.current;
@@ -245,7 +247,10 @@ export default function ChatbotScreen() {
       (total, chunk) => total + chunk.byteLength,
       0,
     );
-    if (byteLength === 0) return;
+    if (byteLength === 0) {
+      setVoicePhase("idle");
+      return;
+    }
 
     const audio = new Uint8Array(byteLength);
     let offset = 0;
@@ -271,6 +276,7 @@ export default function ChatbotScreen() {
       const textToSend = result.result.trim();
       if (textToSend.length < MIN_TRANSCRIPT_LENGTH) return;
       setInputText("");
+      setVoicePhase("idle");
       await sendMessage(textToSend, isMuted);
     } catch (error) {
       console.warn("Error transcribing recording:", error);
@@ -278,6 +284,7 @@ export default function ChatbotScreen() {
       if (task && transcriptionTaskRef.current === task) {
         transcriptionTaskRef.current = null;
       }
+      setVoicePhase("idle");
     }
   }, [isMuted, sendMessage, stopVoiceCapture, whisperContext]);
 
@@ -351,6 +358,9 @@ export default function ChatbotScreen() {
       audioStream.onStatusChange((active) => {
         setIsRecording(active);
         setVoiceRecordingActive(active);
+        if (active) {
+          setVoicePhase("listening");
+        }
       });
       await audioStream.initialize({
         sampleRate: 16000,
@@ -367,6 +377,7 @@ export default function ChatbotScreen() {
         } else {
           utteranceSubmittedRef.current = true;
           voiceSessionActiveRef.current = false;
+          setVoicePhase("idle");
           stopVoiceCapture();
         }
       }, MAX_RECORDING_MS);
@@ -374,11 +385,13 @@ export default function ChatbotScreen() {
       console.log("Error starting voice recording:", error);
       setIsRecording(false);
       setVoiceRecordingActive(false);
+      setVoicePhase("idle");
     }
   };
 
   const stopRecording = useCallback(async () => {
     utteranceSubmittedRef.current = true;
+    setVoicePhase("idle");
     // Deactivate voice session when user manually stops
     voiceSessionActiveRef.current = false;
     const task = transcriptionTaskRef.current;
@@ -401,6 +414,7 @@ export default function ChatbotScreen() {
       // Keep voice session active for manual sends too (user tapped send during recording)
       utteranceSubmittedRef.current = true;
       await stopVoiceCapture();
+      setVoicePhase("idle");
     }
 
     const textToSend = inputText.trim();
@@ -610,69 +624,19 @@ export default function ChatbotScreen() {
         </View>
       )}
 
-      {/* Input Area */}
-      <View className="flex-row items-end px-4 py-6 mb-[8px] bg-background">
-        <TextInput
-          className="flex-1 bg-white border border-gray-200 rounded-3xl px-5 py-3 text-base text-text max-h-32 min-h-12"
-          placeholder="Ask Rico anything..."
-          placeholderTextColor="#9ca3af"
-          value={inputText}
-          onChangeText={setInputText}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          multiline
-          editable={!isGenerating}
-        />
-
-        {/* Stop button — ends recording & voice session (only visible while recording) */}
-        {isRecording && (
-          <TouchableOpacity
-            className="ml-2 rounded-3xl w-12 h-12 items-center justify-center bg-red-500"
-            onPress={endVoiceSession}
-          >
-            <Ionicons name="stop" size={20} color="white" />
-          </TouchableOpacity>
-        )}
-
-        {/* Main action button: Send (has content) or Mic (empty) */}
-        <TouchableOpacity
-          className={`rounded-3xl w-12 h-12 items-center justify-center ${isRecording ? "ml-2" : "ml-3"} ${
-            isGenerating
-              ? "bg-gray-200"
-              : (initializingModel || voiceUnavailable || isPlaybackActive) &&
-                  !hasContent
-                ? "bg-gray-200"
-                : "bg-primary"
-          }`}
-          disabled={
-            isGenerating ||
-            ((initializingModel || voiceUnavailable || isPlaybackActive) &&
-              !hasContent)
-          }
-          onPress={() => {
-            if (hasContent) {
-              handleSend();
-            } else {
-              startVoiceRecording();
-            }
-          }}
-        >
-          {isGenerating ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (initializingModel || isDownloading) && !hasContent ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : hasContent ? (
-            <Ionicons
-              name="send"
-              size={20}
-              color="white"
-              style={{ marginLeft: 3 }}
-            />
-          ) : (
-            <Ionicons name="mic" size={24} color="white" />
-          )}
-        </TouchableOpacity>
-      </View>
+      <ChatComposer
+        inputText={inputText}
+        voicePhase={voicePhase}
+        isRecording={isRecording}
+        isGenerating={isGenerating}
+        isPreparingVoice={initializingModel || isDownloading}
+        voiceUnavailable={voiceUnavailable}
+        isPlaybackActive={isPlaybackActive}
+        onChangeText={setInputText}
+        onSend={handleSend}
+        onStartRecording={startVoiceRecording}
+        onEndVoiceSession={endVoiceSession}
+      />
 
       <ConversationSidebar
         isOpen={isSidebarOpen}
