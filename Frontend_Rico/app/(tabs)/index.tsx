@@ -11,15 +11,16 @@ import { useLLM } from "@/hooks/useLLM";
 import { useWhisperModel } from "@/hooks/useWhisperModel";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import type { WhisperContext, WhisperVadContext } from "whisper.rn/index.js";
-import {
-  RealtimeTranscriber,
-  RingBufferVad,
-  type RealtimeTranscribeEvent,
-  type RealtimeVadEvent,
-} from "whisper.rn/realtime-transcription/index.js";
+import type { WhisperContext } from "whisper.rn/index.js";
+import { RingBufferVad } from "whisper.rn/realtime-transcription/index.js";
 import { PcmAudioStreamAdapter } from "@/utils/PcmAudioStreamAdapter";
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -33,10 +34,8 @@ import {
 } from "react-native";
 
 // ─── Voice endpointing config ──────────────────────────────────────────────────
-const ENDPOINT_STABILITY_MS = 1500; // no-VAD fallback: submit when transcript stops changing
-const SPEECH_END_FALLBACK_MS = 1500; // after VAD speech_end: submit even if no final transcription lands
 const MAX_RECORDING_MS = 5 * 60 * 1000; // hard cap on a single recording session
-const MIN_TRANSCRIPT_LENGTH = 2;   // Don't auto-send single-char hallucinations
+const MIN_TRANSCRIPT_LENGTH = 2; // Don't auto-send single-char hallucinations
 
 // ─── Empty-state suggestion prompts ──────────────────────────────────────────────
 const SUGGESTIONS = [
@@ -55,24 +54,18 @@ function getGreeting() {
 export default function ChatbotScreen() {
   const [inputText, setInputText] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-  const [transcript, setTranscript] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
-  const endpointTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const speechEndFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestTranscriptRef = useRef("");
+  const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const utteranceSubmittedRef = useRef(false);
-
-  // Long-lived RealtimeTranscriber, tagged with the contexts it was built from
-  // so it can be recreated when the user switches Whisper models.
-  const transcriberRef = useRef<{
-    transcriber: RealtimeTranscriber;
-    whisperCtx: WhisperContext;
-    vadCtx: WhisperVadContext | null;
-  } | null>(null);
-  // Per-slice transcription results; long utterances span multiple slices.
-  const sliceTextsRef = useRef(new Map<number, string>());
+  const audioStreamRef = useRef(new PcmAudioStreamAdapter());
+  const vadRef = useRef<RingBufferVad | null>(null);
+  const pcmChunksRef = useRef<Uint8Array[]>([]);
+  const transcriptionTaskRef = useRef<ReturnType<
+    WhisperContext["transcribeData"]
+  > | null>(null);
 
   // Track whether current recording was voice-initiated (for auto-restart)
   const voiceSessionActiveRef = useRef(false);
@@ -151,33 +144,23 @@ export default function ChatbotScreen() {
     }
   }, [initializeWhisperModel, preferencesLoaded, selectedModelId]);
 
-  const clearEndpointTimer = useCallback(() => {
-    if (endpointTimerRef.current) {
-      clearTimeout(endpointTimerRef.current);
-      endpointTimerRef.current = null;
-    }
-  }, []);
-
   const clearVoiceTimers = useCallback(() => {
-    clearEndpointTimer();
-    if (speechEndFallbackTimerRef.current) {
-      clearTimeout(speechEndFallbackTimerRef.current);
-      speechEndFallbackTimerRef.current = null;
-    }
     if (maxDurationTimerRef.current) {
       clearTimeout(maxDurationTimerRef.current);
       maxDurationTimerRef.current = null;
     }
-  }, [clearEndpointTimer]);
+  }, []);
 
-  // The provider owns the Whisper/VAD contexts; this screen owns the transcriber.
+  // The provider owns the Whisper/VAD contexts; this screen owns capture.
   useEffect(() => {
     return () => {
+      utteranceSubmittedRef.current = true;
       clearVoiceTimers();
-      if (transcriberRef.current) {
-        transcriberRef.current.transcriber.release().catch(console.warn);
-        transcriberRef.current = null;
-      }
+      transcriptionTaskRef.current?.stop().catch(console.warn);
+      transcriptionTaskRef.current = null;
+      audioStreamRef.current.release().catch(console.warn);
+      vadRef.current?.reset().catch(console.warn);
+      vadRef.current = null;
       setVoiceRecordingActive(false);
       cancelGeneration();
       clearAudioQueue();
@@ -188,20 +171,6 @@ export default function ChatbotScreen() {
     clearVoiceTimers,
     setVoiceRecordingActive,
   ]);
-
-  // The provider releases a replaced WhisperContext as soon as a new one is
-  // set, so drop any idle transcriber still pointing at the old contexts.
-  // Model switching is blocked while recording, so this never fires mid-capture.
-  useEffect(() => {
-    const current = transcriberRef.current;
-    if (
-      current &&
-      (current.whisperCtx !== whisperContext || current.vadCtx !== vadContext)
-    ) {
-      transcriberRef.current = null;
-      current.transcriber.release().catch(console.warn);
-    }
-  }, [whisperContext, vadContext]);
 
   // Auto-restart recording after TTS finishes (hands-free conversational loop)
   useEffect(() => {
@@ -214,7 +183,9 @@ export default function ChatbotScreen() {
       voiceSessionActiveRef.current &&
       !isGenerating &&
       !isRecording &&
+      !transcriptionTaskRef.current &&
       whisperContext &&
+      vadContext &&
       !initializingModel
     ) {
       // Small delay so audio session can switch cleanly from playback to recording
@@ -222,15 +193,24 @@ export default function ChatbotScreen() {
         if (
           voiceSessionActiveRef.current &&
           !isRecording &&
-          !isGenerating
+          !isGenerating &&
+          !transcriptionTaskRef.current
         ) {
           console.log("🔄 Auto-restarting recording (hands-free mode)");
-          startRealtimeTranscribtion();
+          startVoiceRecording();
         }
       }, 500);
       return () => clearTimeout(restartTimer);
     }
-  }, [isPlaying, isPlaybackActive, isGenerating, isRecording, whisperContext, initializingModel]);
+  }, [
+    isPlaying,
+    isPlaybackActive,
+    isGenerating,
+    isRecording,
+    whisperContext,
+    vadContext,
+    initializingModel,
+  ]);
 
   // Auto-scroll to bottom when messages update
   useEffect(() => {
@@ -242,10 +222,10 @@ export default function ChatbotScreen() {
   }, [messages, isGenerating, thinking]);
 
   // Stop capture and clear recording state; shared by every stop path.
-  const stopTranscriber = useCallback(async () => {
+  const stopVoiceCapture = useCallback(async () => {
     clearVoiceTimers();
     try {
-      await transcriberRef.current?.transcriber.stop();
+      await audioStreamRef.current.stop();
     } catch (error) {
       console.warn("Error stopping recording:", error);
     } finally {
@@ -254,188 +234,61 @@ export default function ChatbotScreen() {
     }
   }, [clearVoiceTimers, setVoiceRecordingActive]);
 
-  const finalizeVoiceTranscript = useCallback(async (transcriptText: string) => {
-    const textToSend = transcriptText.trim();
-    if (
-      utteranceSubmittedRef.current ||
-      !textToSend ||
-      textToSend.length < MIN_TRANSCRIPT_LENGTH
-    ) {
-      return;
-    }
-
+  const transcribeAndSend = useCallback(async () => {
+    if (utteranceSubmittedRef.current || !whisperContext) return;
     utteranceSubmittedRef.current = true;
-    await stopTranscriber();
+    await stopVoiceCapture();
 
-    latestTranscriptRef.current = "";
-    sliceTextsRef.current.clear();
-    setTranscript("");
-    setInputText("");
-    await sendMessage(textToSend, isMuted);
-  }, [stopTranscriber, sendMessage, isMuted]);
+    const chunks = pcmChunksRef.current;
+    pcmChunksRef.current = [];
+    const byteLength = chunks.reduce(
+      (total, chunk) => total + chunk.byteLength,
+      0,
+    );
+    if (byteLength === 0) return;
 
-  const scheduleEndpointSend = useCallback((currentTranscript: string) => {
-    clearEndpointTimer();
-    if (currentTranscript.trim().length < MIN_TRANSCRIPT_LENGTH) return;
-
-    endpointTimerRef.current = setTimeout(() => {
-      endpointTimerRef.current = null;
-      finalizeVoiceTranscript(latestTranscriptRef.current);
-    }, ENDPOINT_STABILITY_MS);
-  }, [clearEndpointTimer, finalizeVoiceTranscript]);
-
-  // ─── Transcriber event handlers ──────────────────────────────────────────────
-
-  // Live transcript updates. Each utterance is one slice (finalized on VAD
-  // speech_end); only utterances longer than the slice cap span several.
-  const handleTranscribeEvent = useCallback((event: RealtimeTranscribeEvent) => {
-    if (utteranceSubmittedRef.current) return;
-    if (event.type !== "transcribe" || !event.data?.result) return;
-
-    sliceTextsRef.current.set(Math.max(event.sliceIndex, 0), event.data.result.trim());
-    const fullTranscript = [...sliceTextsRef.current.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([, text]) => text)
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    latestTranscriptRef.current = fullTranscript;
-    setTranscript(fullTranscript);
-
-    // Without VAD there is no speech_end signal, so fall back to submitting
-    // once the transcript stops changing.
-    if (!transcriberRef.current?.vadCtx) {
-      scheduleEndpointSend(fullTranscript);
+    const audio = new Uint8Array(byteLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      audio.set(chunk, offset);
+      offset += chunk.byteLength;
     }
-  }, [scheduleEndpointSend]);
 
-  // Fires once per utterance with the final full-context transcription of the
-  // slice that VAD just closed — the primary submit trigger.
-  const handleTranscriptStabilized = useCallback((text: string) => {
-    if (utteranceSubmittedRef.current) return;
-    // latestTranscriptRef already contains this slice's final text: the
-    // transcribe event for the finalized slice fires just before this callback.
-    finalizeVoiceTranscript(latestTranscriptRef.current || text);
-  }, [finalizeVoiceTranscript]);
+    let task: ReturnType<typeof whisperContext.transcribeData> | null = null;
+    try {
+      console.log(
+        "⏳ Waiting for Whisper to transcribe the completed utterance...",
+      );
+      task = whisperContext.transcribeData(audio.buffer, { language: "en" });
+      transcriptionTaskRef.current = task;
+      const result = await task.promise;
+      console.log(
+        "✅ Transcription complete:",
+        new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+      );
+      if (transcriptionTaskRef.current !== task || result.isAborted) return;
 
-  const handleVadEvent = useCallback((event: RealtimeVadEvent) => {
-    if (event.type === "speech_start" || event.type === "speech_continue") {
-      clearEndpointTimer();
-      if (speechEndFallbackTimerRef.current) {
-        clearTimeout(speechEndFallbackTimerRef.current);
-        speechEndFallbackTimerRef.current = null;
+      const textToSend = result.result.trim();
+      if (textToSend.length < MIN_TRANSCRIPT_LENGTH) return;
+      setInputText("");
+      await sendMessage(textToSend, isMuted);
+    } catch (error) {
+      console.warn("Error transcribing recording:", error);
+    } finally {
+      if (task && transcriptionTaskRef.current === task) {
+        transcriptionTaskRef.current = null;
       }
-    } else if (event.type === "speech_end") {
-      // The final transcription for this utterance is queued now. If it never
-      // lands (e.g. the segment was too short to transcribe), submit whatever
-      // partial transcript we have instead of hanging the voice session.
-      if (speechEndFallbackTimerRef.current) {
-        clearTimeout(speechEndFallbackTimerRef.current);
-      }
-      speechEndFallbackTimerRef.current = setTimeout(() => {
-        speechEndFallbackTimerRef.current = null;
-        finalizeVoiceTranscript(latestTranscriptRef.current);
-      }, SPEECH_END_FALLBACK_MS);
     }
-  }, [clearEndpointTimer, finalizeVoiceTranscript]);
+  }, [isMuted, sendMessage, stopVoiceCapture, whisperContext]);
 
-  const handleTranscriberStatusChange = useCallback((isActive: boolean) => {
-    setIsRecording(isActive);
-    setVoiceRecordingActive(isActive);
-  }, [setVoiceRecordingActive]);
-
-  const handleMaxDurationReached = useCallback(() => {
-    if (latestTranscriptRef.current.trim().length >= MIN_TRANSCRIPT_LENGTH) {
-      finalizeVoiceTranscript(latestTranscriptRef.current);
-    } else {
-      utteranceSubmittedRef.current = true;
-      voiceSessionActiveRef.current = false;
-      stopTranscriber();
-    }
-  }, [finalizeVoiceTranscript, stopTranscriber]);
-
-  // The transcriber is a long-lived instance whose callbacks are set once at
-  // construction; route them through a ref so they always see fresh state.
-  const voiceHandlersRef = useRef({
-    onTranscribe: handleTranscribeEvent,
-    onStabilized: handleTranscriptStabilized,
-    onVad: handleVadEvent,
-    onStatusChange: handleTranscriberStatusChange,
-    onMaxDuration: handleMaxDurationReached,
-  });
+  const voiceHandlersRef = useRef({ onSpeechEnd: transcribeAndSend });
   useEffect(() => {
-    voiceHandlersRef.current = {
-      onTranscribe: handleTranscribeEvent,
-      onStabilized: handleTranscriptStabilized,
-      onVad: handleVadEvent,
-      onStatusChange: handleTranscriberStatusChange,
-      onMaxDuration: handleMaxDurationReached,
-    };
-  }, [
-    handleTranscribeEvent,
-    handleTranscriptStabilized,
-    handleVadEvent,
-    handleTranscriberStatusChange,
-    handleMaxDurationReached,
-  ]);
+    voiceHandlersRef.current.onSpeechEnd = transcribeAndSend;
+  }, [transcribeAndSend]);
 
   // ─── Recording ───────────────────────────────────────────────────────────────
 
-  const getOrCreateTranscriber = useCallback((): RealtimeTranscriber | null => {
-    if (!whisperContext) return null;
-
-    const existing = transcriberRef.current;
-    if (
-      existing &&
-      existing.whisperCtx === whisperContext &&
-      existing.vadCtx === vadContext
-    ) {
-      return existing.transcriber;
-    }
-    if (existing) {
-      transcriberRef.current = null;
-      existing.transcriber.release().catch(console.warn);
-    }
-
-    const transcriber = new RealtimeTranscriber(
-      {
-        whisperContext,
-        // RingBufferVad adapts the WhisperVadContext to the transcriber's
-        // streaming VAD interface; its presence enables VAD endpointing.
-        vadContext: vadContext
-          ? new RingBufferVad(vadContext, {
-              vadPreset: "default",
-              // Don't cut users off at brief mid-sentence pauses (preset: 100ms)
-              vadOptions: { minSilenceDurationMs: 400 },
-              logger: __DEV__ ? console.log : undefined,
-            })
-          : undefined,
-        audioStream: new PcmAudioStreamAdapter(),
-      },
-      {
-        audioMinSec: 1,
-        transcribeOptions: { language: "en" },
-        logger: __DEV__ ? console.log : undefined,
-      },
-      {
-        onTranscribe: (event) => voiceHandlersRef.current.onTranscribe(event),
-        onSliceTranscriptionStabilized: (text) =>
-          voiceHandlersRef.current.onStabilized(text),
-        onVad: (event) => voiceHandlersRef.current.onVad(event),
-        onStatusChange: (isActive) =>
-          voiceHandlersRef.current.onStatusChange(isActive),
-        onError: (error) => console.warn("Transcriber error:", error),
-      },
-    );
-    transcriberRef.current = {
-      transcriber,
-      whisperCtx: whisperContext,
-      vadCtx: vadContext,
-    };
-    return transcriber;
-  }, [whisperContext, vadContext]);
-
-  const startRealtimeTranscribtion = async () => {
+  const startVoiceRecording = async () => {
     // Stop any active TTS playback when user starts recording
     clearAudioQueue();
     const isPermissionGranted = await checkRecordingPermission();
@@ -446,39 +299,102 @@ export default function ChatbotScreen() {
       console.log("Already recording");
       return;
     }
-    const transcriber = getOrCreateTranscriber();
-    if (!transcriber) {
-      console.log("Whisper context not initialized");
+    if (!whisperContext || !vadContext) {
+      console.log("Whisper or VAD context not initialized");
       return;
     }
 
     // Mark voice session as active (for auto-restart after TTS)
     voiceSessionActiveRef.current = true;
     utteranceSubmittedRef.current = false;
-    latestTranscriptRef.current = "";
-    sliceTextsRef.current.clear();
+    pcmChunksRef.current = [];
+
+    let lastVadLogAt = 0;
 
     try {
-      await transcriber.start();
+      const vad = new RingBufferVad(vadContext, {
+        vadPreset: "default",
+        speechRateThreshold: 0.5,
+        vadOptions: { minSilenceDurationMs: 400 },
+        logger: __DEV__ ? console.log : undefined,
+      });
+      vad.onSpeechStart((_confidence, preRollAudio) => {
+        console.log("🗣️ Speech started", new Date().toISOString(), {
+          _confidence,
+        });
+        if (!utteranceSubmittedRef.current)
+          pcmChunksRef.current = [preRollAudio];
+      });
+      vad.onSpeechContinue((_confidence, audio) => {
+        const now = performance.now();
+        // Avoid printing every audio chunk
+        if (now - lastVadLogAt >= 500) {
+          lastVadLogAt = now;
+          console.log("🎙️ VAD continues", new Date().toISOString(), {
+            _confidence,
+          });
+          if (!utteranceSubmittedRef.current) pcmChunksRef.current.push(audio);
+        }
+      });
+      vad.onSpeechEnd((_confidence) => {
+        console.log("🛑 Speech ended", new Date().toISOString(), {
+          _confidence,
+        });
+
+        console.log(
+          "🛑 Speech ended; microphone capture is stopping.",
+          new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+        );
+        voiceHandlersRef.current.onSpeechEnd();
+      });
+      vad.onError((error) => console.warn("VAD error:", error));
+      vadRef.current = vad;
+
+      const audioStream = audioStreamRef.current;
+      audioStream.onData(({ data }) => vad.processAudio(data));
+      audioStream.onError((error) =>
+        console.warn("Audio stream error:", error),
+      );
+      audioStream.onStatusChange((active) => {
+        setIsRecording(active);
+        setVoiceRecordingActive(active);
+      });
+      await audioStream.initialize({
+        sampleRate: 16000,
+        channels: 1,
+        bitsPerSample: 16,
+      });
+      await audioStream.start();
       // Safety cap on a single recording session (e.g. user walks away and
       // VAD never endpoints); submits what we have or ends the session.
       maxDurationTimerRef.current = setTimeout(() => {
         maxDurationTimerRef.current = null;
-        voiceHandlersRef.current.onMaxDuration();
+        if (pcmChunksRef.current.length > 0) {
+          voiceHandlersRef.current.onSpeechEnd();
+        } else {
+          utteranceSubmittedRef.current = true;
+          voiceSessionActiveRef.current = false;
+          stopVoiceCapture();
+        }
       }, MAX_RECORDING_MS);
     } catch (error) {
-      console.log("Error starting realtime transcription:", error);
+      console.log("Error starting voice recording:", error);
       setIsRecording(false);
       setVoiceRecordingActive(false);
     }
-  }
+  };
 
   const stopRecording = useCallback(async () => {
     utteranceSubmittedRef.current = true;
     // Deactivate voice session when user manually stops
     voiceSessionActiveRef.current = false;
-    await stopTranscriber();
-  }, [stopTranscriber]);
+    const task = transcriptionTaskRef.current;
+    transcriptionTaskRef.current = null;
+    await task?.stop();
+    pcmChunksRef.current = [];
+    await stopVoiceCapture();
+    await vadRef.current?.reset();
+  }, [stopVoiceCapture]);
 
   /**
    * Handle sending a message — stops recording if active, then sends.
@@ -491,22 +407,27 @@ export default function ChatbotScreen() {
     if (isRecording) {
       // Keep voice session active for manual sends too (user tapped send during recording)
       utteranceSubmittedRef.current = true;
-      await stopTranscriber();
+      await stopVoiceCapture();
     }
 
-    const textToSend = inputText.trim() || transcript.trim();
+    const textToSend = inputText.trim();
     if (!textToSend || isGenerating) return;
 
     // Clear inputs
     setInputText("");
-    setTranscript("");
-    latestTranscriptRef.current = "";
-    sliceTextsRef.current.clear();
     Keyboard.dismiss();
 
     // Send to Gemini
     await sendMessage(textToSend, isMuted);
-  }, [inputText, transcript, isGenerating, isRecording, sendMessage, clearAudioQueue, stopTranscriber, isMuted]);
+  }, [
+    inputText,
+    isGenerating,
+    isRecording,
+    sendMessage,
+    clearAudioQueue,
+    stopVoiceCapture,
+    isMuted,
+  ]);
 
   // Send a tapped suggestion prompt from the empty state
   const handleSuggestion = useCallback(
@@ -515,27 +436,21 @@ export default function ChatbotScreen() {
       clearAudioQueue();
       sendMessage(text, isMuted);
     },
-    [isGenerating, sendMessage, clearAudioQueue, isMuted]
+    [isGenerating, sendMessage, clearAudioQueue, isMuted],
   );
 
   // ─── End voice session (stop the hands-free loop) ────────────────────────────
 
   const endVoiceSession = useCallback(() => {
     voiceSessionActiveRef.current = false;
-    clearEndpointTimer();
     cancelGeneration();
     clearAudioQueue();
     stopRecording();
-  }, [
-    cancelGeneration,
-    clearAudioQueue,
-    clearEndpointTimer,
-    stopRecording,
-  ]);
+  }, [cancelGeneration, clearAudioQueue, stopRecording]);
 
-  const hasContent = inputText.trim().length > 0 || transcript.trim().length > 0;
+  const hasContent = inputText.trim().length > 0;
   const hasMessages = messages.length > 0;
-  const voiceUnavailable = !whisperContext && !hasContent;
+  const voiceUnavailable = (!whisperContext || !vadContext) && !hasContent;
 
   return (
     <KeyboardAvoidingView
@@ -620,13 +535,17 @@ export default function ChatbotScreen() {
           <View className="flex-1 justify-center">
             {/* Greeting */}
             <Text
-              style={{ fontFamily: Platform.OS === "ios" ? "Georgia" : "serif" }}
+              style={{
+                fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+              }}
               className="text-4xl font-bold text-text"
             >
               {greeting}, {firstName}.
             </Text>
             <Text
-              style={{ fontFamily: Platform.OS === "ios" ? "Georgia" : "serif" }}
+              style={{
+                fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+              }}
               className="text-4xl text-gray-400 mb-8"
             >
               What&apos;s on your plate?
@@ -640,7 +559,9 @@ export default function ChatbotScreen() {
                 className="flex-row items-center bg-white rounded-2xl border border-gray-200 px-4 py-4 mb-3"
               >
                 <Ionicons name={s.icon} size={20} color="#47d254" />
-                <Text className="flex-1 text-text text-base ml-3">{s.label}</Text>
+                <Text className="flex-1 text-text text-base ml-3">
+                  {s.label}
+                </Text>
                 <Ionicons name="chevron-forward" size={18} color="#c7c7cc" />
               </TouchableOpacity>
             ))}
@@ -655,21 +576,21 @@ export default function ChatbotScreen() {
               <ScheduleConfirmation
                 events={msg.scheduleEvents}
                 onConfirm={() => addEvents(msg.scheduleEvents!)}
-                onDismiss={() => { }}
+                onDismiss={() => {}}
               />
             )}
             {msg.scheduleUpdates && msg.scheduleUpdates.length > 0 && (
               <UpdateConfirmation
                 updates={msg.scheduleUpdates}
                 onConfirm={() => updateEvents(msg.scheduleUpdates!)}
-                onDismiss={() => { }}
+                onDismiss={() => {}}
               />
             )}
             {msg.scheduleDeletes && msg.scheduleDeletes.length > 0 && (
               <DeleteConfirmation
                 deletes={msg.scheduleDeletes}
                 onConfirm={() => deleteEvents(msg.scheduleDeletes!)}
-                onDismiss={() => { }}
+                onDismiss={() => {}}
               />
             )}
           </View>
@@ -679,24 +600,12 @@ export default function ChatbotScreen() {
         {isGenerating && <ThinkingIndicator thinking={thinking} />}
       </ScrollView>
 
-      {/* Live transcript preview (shown while recording) */}
-      {isRecording && transcript.length > 0 && (
-        <View className="mx-4 mb-1 px-[14px] py-2 bg-green-50 rounded-xl border-l-[3px] border-l-green-500">
-          <View className="flex-row items-center">
-            <Text className="text-xs text-green-600 font-semibold">
-              Listening...
-            </Text>
-          </View>
-          <Text className="text-sm text-gray-800 mt-0.5">
-            {transcript}
-          </Text>
-        </View>
-      )}
-
       {/* Error Banner */}
       {error && (
         <View className="bg-red-50 p-[10px] mx-4 mb-2 rounded-xl border border-red-300">
-          <Text className="text-red-700 text-[13px] text-center font-medium">⚠️ {error}</Text>
+          <Text className="text-red-700 text-[13px] text-center font-medium">
+            ⚠️ {error}
+          </Text>
         </View>
       )}
 
@@ -714,11 +623,8 @@ export default function ChatbotScreen() {
           className="flex-1 bg-white border border-gray-200 rounded-3xl px-5 py-3 text-base text-text max-h-32 min-h-12"
           placeholder="Ask Rico anything..."
           placeholderTextColor="#9ca3af"
-          value={inputText || transcript}
-          onChangeText={(text) => {
-            setInputText(text);
-            if (transcript) setTranscript("");
-          }}
+          value={inputText}
+          onChangeText={setInputText}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           multiline
@@ -740,16 +646,21 @@ export default function ChatbotScreen() {
           className={`rounded-3xl w-12 h-12 items-center justify-center ${isRecording ? "ml-2" : "ml-3"} ${
             isGenerating
               ? "bg-gray-200"
-              : (initializingModel || voiceUnavailable || isPlaybackActive) && !hasContent
+              : (initializingModel || voiceUnavailable || isPlaybackActive) &&
+                  !hasContent
                 ? "bg-gray-200"
                 : "bg-primary"
           }`}
-          disabled={isGenerating || ((initializingModel || voiceUnavailable || isPlaybackActive) && !hasContent)}
+          disabled={
+            isGenerating ||
+            ((initializingModel || voiceUnavailable || isPlaybackActive) &&
+              !hasContent)
+          }
           onPress={() => {
             if (hasContent) {
               handleSend();
             } else {
-              startRealtimeTranscribtion();
+              startVoiceRecording();
             }
           }}
         >
@@ -758,7 +669,12 @@ export default function ChatbotScreen() {
           ) : (initializingModel || isDownloading) && !hasContent ? (
             <ActivityIndicator size="small" color="white" />
           ) : hasContent ? (
-            <Ionicons name="send" size={20} color="white" style={{ marginLeft: 3 }} />
+            <Ionicons
+              name="send"
+              size={20}
+              color="white"
+              style={{ marginLeft: 3 }}
+            />
           ) : (
             <Ionicons name="mic" size={24} color="white" />
           )}

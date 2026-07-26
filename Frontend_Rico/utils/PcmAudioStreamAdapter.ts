@@ -10,10 +10,8 @@ import type {
 /**
  * Replacement for whisper.rn's stock AudioPcmStreamAdapter, which clears its
  * onData/onError/onStatusChange callbacks when initialize() is called on an
- * already-initialized instance. RealtimeTranscriber registers those callbacks
- * only once (in its constructor) but re-initializes the adapter on every
- * start(), so with the stock adapter recording goes silent from the second
- * session onward. This adapter keeps callbacks across initialize/release.
+ * already-initialized instance. The voice pipeline reuses this adapter across
+ * recording sessions, so callbacks must survive initialize/release.
  */
 export class PcmAudioStreamAdapter implements AudioStreamInterface {
     private recording = false;
@@ -61,7 +59,7 @@ export class PcmAudioStreamAdapter implements AudioStreamInterface {
         return this.recording;
     }
 
-    onData(callback: (data: AudioStreamData) => void): void {
+    onData(callback: (audioStreamData: AudioStreamData) => void): void {
         this.dataCallback = callback;
     }
 
@@ -77,8 +75,8 @@ export class PcmAudioStreamAdapter implements AudioStreamInterface {
         if (this.recording) {
             await this.stop();
         }
-        // Intentionally keep the registered callbacks: the transcriber may
-        // re-initialize this adapter and expects them to still be in place.
+        // Intentionally keep callbacks because the voice pipeline reuses this
+        // adapter across recording sessions.
     }
 
     private handleAudioData(base64Data: string): void {

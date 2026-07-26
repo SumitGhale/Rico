@@ -33,7 +33,7 @@ export interface WhisperModel {
 export const DEFAULT_WHISPER_MODEL_ID = "ggml-base.en-q5_1";
 const SELECTED_MODEL_KEY = "rico_selected_whisper_model";
 
-// Silero VAD model used by RealtimeTranscriber for utterance endpointing.
+// Silero VAD model used for utterance endpointing.
 // Not part of WHISPER_MODELS so it never appears in the model picker.
 const VAD_MODEL = {
     id: "ggml-silero-v5.1.2",
@@ -230,8 +230,8 @@ export function WhisperModelProvider({ children }: { children: React.ReactNode }
     }, [getOrDownloadModel]);
 
     // The VAD model is independent of the selected Whisper model: initialize it
-    // once and keep it across model switches. Failure is non-fatal — the chat
-    // screen falls back to transcript-stability endpointing without VAD.
+    // once and keep it across model switches. The chat screen disables voice
+    // input if this context is unavailable.
     const initializeVadContext = useCallback(async () => {
         if (vadInitStartedRef.current) return;
         vadInitStartedRef.current = true;
