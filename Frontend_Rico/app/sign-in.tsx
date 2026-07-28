@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,7 +21,6 @@ export default function SignInScreen() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +55,7 @@ export default function SignInScreen() {
       if (isLogin) {
         await login(email.trim(), password);
       } else {
-        await register(email.trim(), password, name.trim() || undefined);
+        await register(email.trim(), password);
       }
     } catch (err: any) {
       setError(err.message ?? "Something went wrong");
@@ -78,34 +78,21 @@ export default function SignInScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            paddingHorizontal: 24,
+            paddingVertical: 48,
+          }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ─── Header / Brand ─────────────────────────────────────── */}
-          <View className="items-center pt-24 pb-10">
-            {/* App icon */}
-            <View className="w-20 h-20 rounded-3xl bg-blue-600 items-center justify-center mb-5 shadow-lg">
-              <Ionicons name="chatbubble-ellipses" size={40} color="#ffffff" />
-            </View>
-            <Text className="text-white text-4xl font-bold tracking-tight">
-              Rico
-            </Text>
-            <Text className="text-gray-400 text-base mt-2">
-              Your AI scheduling assistant
-            </Text>
-          </View>
-
-          {/* ─── Card ───────────────────────────────────────────────── */}
-          <View className="mx-6 bg-gray-900 rounded-3xl px-6 py-8 border border-gray-800">
-            {/* Mode title */}
-            <Text className="text-white text-2xl font-bold mb-1">
-              {isLogin ? "Welcome back" : "Create account"}
-            </Text>
-            <Text className="text-gray-400 text-sm mb-6">
-              {isLogin
-                ? "Sign in to continue to Rico"
-                : "Sign up to get started with Rico"}
-            </Text>
+          <View className="w-full max-w-md self-center">
+            <Image
+              source={require("@/assets/images/icon.png")}
+              className="w-28 h-28 rounded-[28px] self-center mb-12"
+              resizeMode="contain"
+              accessibilityLabel="Rico logo"
+            />
 
             {/* ─── Error ──────────────────────────────────────────── */}
             {error && (
@@ -117,27 +104,6 @@ export default function SignInScreen() {
                   style={{ marginRight: 8 }}
                 />
                 <Text className="text-red-300 text-sm flex-1">{error}</Text>
-              </View>
-            )}
-
-            {/* ─── Name field (register only) ─────────────────────── */}
-            {!isLogin && (
-              <View className="mb-4">
-                <Text className="text-gray-300 text-sm font-medium mb-2 ml-1">
-                  Name
-                </Text>
-                <View className="flex-row items-center bg-gray-800 border border-gray-700 rounded-xl px-4">
-                  <Ionicons name="person-outline" size={18} color="#9ca3af" />
-                  <TextInput
-                    className="flex-1 text-white text-base py-3.5 ml-3"
-                    placeholder="Your name (optional)"
-                    placeholderTextColor="#6b7280"
-                    value={name}
-                    onChangeText={setName}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                  />
-                </View>
               </View>
             )}
 
@@ -157,6 +123,7 @@ export default function SignInScreen() {
                     setEmail(t);
                     if (error) setError(null);
                   }}
+                  autoFocus={true}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}

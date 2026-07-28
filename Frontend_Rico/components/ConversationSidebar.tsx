@@ -147,8 +147,8 @@ export function ConversationSidebar({ isOpen, onClose, onSelectConversation }: P
             onPress={onClose}
             activeOpacity={0.8}
           >
-            <Ionicons name="add" size={20} color="#2A2A2A"  />
-            <Text className="text-base font-bold text-text">New chat</Text>
+            <Ionicons name="add" size={20} color="white"  />
+            <Text className="text-base font-bold text-text color-white">New chat</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
