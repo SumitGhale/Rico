@@ -6,8 +6,13 @@ import {
   createTaskLimiter,
   extractCompleteSentences,
 } from "../utils/chatStream.js";
-import { getPromptRecommendationsContext } from "../utils/eventCategorisation.js";
+import { getAllUserPreferences } from "../services/preferenceService.js";
+import {
+  getRecommendedDurationFromPreferences,
+  groupByCategory,
+} from "../utils/recommendationLogic.js";
 import { aiLimiter, generalApiLimiter } from "../../middleware/rateLimit.js";
+import {getRecommendationMessage} from "../utils/eventCategorisation.js";
 
 const router = Router();
 const API_KEY = process.env.TTS_API_KEY;
@@ -79,8 +84,17 @@ async function createConversation(userId) {
   });
 }
 
-async function createChat(userId, messages, timeZone = "UTC") {
-  const systemInstruction = await getSystemInstruction(userId, timeZone);
+async function createChat(
+  userId,
+  messages,
+  timeZone = "UTC",
+  recommendationMessage = "",
+) {
+  const baseSystemInstruction = await getSystemInstruction(userId, timeZone);
+  const systemInstruction = recommendationMessage
+    ? `${baseSystemInstruction}\n\n${recommendationMessage}`
+    : baseSystemInstruction;
+
   return ai.chats.create({
     model: GEMINI_MODEL,
     config: { systemInstruction },
@@ -229,23 +243,16 @@ router.post("/chat/stream", aiLimiter, async (req, res) => {
     });
 
     const trimmedMessage = message.trim();
-    // 1. Obtain duration recommendations for user's prompt categories
-    const recommendationContext = await getPromptRecommendationsContext(
-      req.userId,
-      trimmedMessage,
-    );
-    // 2. Append context to user message for model prompt (without polluting stored DB message)
-    const augmentedMessage = recommendationContext
-      ? `${trimmedMessage}\n\n${recommendationContext}`
-      : trimmedMessage;
+    const recommendationMessage = await getRecommendationMessage(req.userId);
 
     const currentChat = await createChat(
       req.userId,
       conversation.messages,
       timezone,
+      recommendationMessage,
     );
     const stream = await currentChat.sendMessageStream({
-      message: augmentedMessage,
+      message: trimmedMessage,
     });
 
     const scheduleParser = createScheduleStreamParser();

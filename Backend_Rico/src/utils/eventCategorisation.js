@@ -74,8 +74,7 @@ export async function categorizeEvent(eventTitle) {
       ...new Set(
         parsed.filter(
           (category) =>
-            typeof category === "string" &&
-            EVENT_CATEGORIES.includes(category),
+            typeof category === "string" && EVENT_CATEGORIES.includes(category),
         ),
       ),
     ];
@@ -84,44 +83,48 @@ export async function categorizeEvent(eventTitle) {
   }
 }
 
-/*                                                                 
-     * Categorizes user prompt and retrieves recommended durations for  
-    all detected categories.                                              
-*/
-export async function getPromptRecommendationsContext(userId, userPrompt) {
+// Get the recommended duration for a given category based on user preferences.
+export async function getRecommendationMessage(userId) {
   try {
-    const categories = await categorizeEvent(userPrompt);
+    const preferences = await getAllUserPreferences(userId);
+    const preferencesByCategory = groupByCategory(preferences);
+    const recommendedDurations = new Map();
 
-    if (categories.length === 0) {
-      return null;
+    for (const [category, categoryPreferences] of Object.entries(
+      preferencesByCategory,
+    )) {
+      const duration =
+        getRecommendedDurationFromPreferences(categoryPreferences);
+
+      if (duration !== null) {
+        recommendedDurations.set(category, duration);
+      }
     }
 
-    const results = await Promise.all(
-      categories.map(async (category) => {
-        const duration = await getRecommendedDuration(userId, category);
-        return duration ? { category, duration } : null;
-      }),
-    );
-
-    const validRecommendations = results.filter(Boolean);
-    if (validRecommendations.length === 0) {
-      return null;
+    if (recommendedDurations.size === 0) {
+      return "";
     }
 
-    const lines = validRecommendations.map(
-      (recommendation) =>
-        `- ${recommendation.category}: ~${recommendation.duration} mins`,
-    );
+    const durationLines = [...recommendedDurations.entries()]
+      .sort(([leftCategory], [rightCategory]) =>
+        leftCategory.localeCompare(rightCategory),
+      )
+      .map(([category, duration]) => `- ${category}: ~${duration} minutes`)
+      .join("\n");
 
-    return `[System Note — Historical User Duration Preferences:
-    ${lines.join("\n")}
-    Consider these durations when estimating times and building the
-  schedule.]`;
+    return `## Recommended Event Durations Based on User Preferences
+These recommendations were learned from the categories and durations of the
+user's past events:
+${durationLines}
+
+When a requested event clearly matches one of these categories, use its
+recommended duration as the default. A duration explicitly provided by the
+user always takes priority. Do not mention these internal category names.`;
   } catch (error) {
     console.warn(
       "Duration recommendation lookup failed; continuing without it:",
       error,
     );
-    return null;
+    return "";
   }
 }

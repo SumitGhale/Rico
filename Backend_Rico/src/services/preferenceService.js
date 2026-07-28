@@ -45,3 +45,10 @@ export async function getUserPreferences(userId, category) {
     orderBy: { createdAt: "desc" },
   });
 }
+
+export async function getAllUserPreferences(userId) {
+  return prisma.categoryEvent.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+  });
+}
