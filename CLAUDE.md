@@ -13,7 +13,7 @@ Rico is a voice-first AI planning assistant. Users converse with Gemini to plan 
 
 ### Backend (`Backend_Rico/`)
 ```bash
-npm run dev       # watch mode via tsx
+npm run dev       # watch mode via
 npm run start     # production start
 npx prisma migrate dev    # run DB migrations
 npx prisma studio         # open Prisma Studio GUI

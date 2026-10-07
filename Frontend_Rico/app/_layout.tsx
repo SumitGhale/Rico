@@ -105,7 +105,7 @@ function RootLayoutNav() {
 
             {/* Main app: only accessible when authenticated */}
             <Stack.Protected guard={isAuthenticated}>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)"  options={{ headerShown: false, title: 'Home' }} />
               <Stack.Screen name="calendar" />
               <Stack.Screen
                 name="modal"
