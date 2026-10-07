@@ -13,6 +13,7 @@ import {
 } from "../utils/recommendationLogic.js";
 import { aiLimiter, generalApiLimiter } from "../../middleware/rateLimit.js";
 import {getRecommendationMessage} from "../utils/eventCategorisation.js";
+import { normalizeGeminiError } from "../utils/ErrorHelper.js";
 
 const router = Router();
 const API_KEY = process.env.TTS_API_KEY;
@@ -373,6 +374,7 @@ router.post("/chat/stream", aiLimiter, async (req, res) => {
 
     res.end();
   } catch (err) {
+    const normalizedGeminiError = normalizeGeminiError(err)
     console.error("Gemini streaming API error:", err);
 
     if (res.headersSent) {
@@ -384,8 +386,8 @@ router.post("/chat/stream", aiLimiter, async (req, res) => {
       return;
     }
 
-    res.status(500).json({
-      error: err?.message || "Something went wrong with the Gemini API",
+    res.status(normalizeGeminiError.status).json({
+      error: err?.code || "Something went wrong with the Gemini API",
     });
   }
 });

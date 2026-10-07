@@ -8,7 +8,7 @@ export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 export const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // ─── Model Name ──────────────────────────────────────────────────────────────
-export const GEMINI_MODEL = "gemini-3.8-flash";
+export const GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 // ─── Dynamic System Prompt ───────────────────────────────────────────────────
 

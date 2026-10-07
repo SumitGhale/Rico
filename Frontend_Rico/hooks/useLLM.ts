@@ -9,6 +9,7 @@ import type {
 } from "@/utils/parseSchedule";
 import { fetch as expoFetch } from "expo/fetch";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getUserFriendlyError } from "@/utils/errorHelper";
 
 export interface Message {
   id: string;
@@ -238,8 +239,9 @@ export function useLLM(options: UseLLMOptions = {}) {
         }
 
         console.error("Backend streaming API error:", streamError);
+        const userFrendlyError = getUserFriendlyError(streamError.code);
         setError(
-          streamError?.message || "Something went wrong. Please try again."
+          userFrendlyError || "Something went wrong. Please try again."
         );
         onAudioStreamCancel?.();
       } finally {
