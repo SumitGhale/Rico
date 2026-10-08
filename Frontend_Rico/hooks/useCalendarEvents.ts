@@ -1,6 +1,16 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import type { EventItem } from "@howljs/calendar-kit";
-import type { ScheduleEvent, ScheduleUpdate, ScheduleDelete } from "@/utils/parseSchedule";
+import type {
+  ScheduleEvent,
+  ScheduleUpdate,
+  ScheduleDelete,
+} from "@/utils/parseSchedule";
 import {
   fetchAllEvents,
   createEvent,
@@ -10,6 +20,7 @@ import {
   type BackendEvent,
 } from "@/services/eventService";
 import { useAuth } from "@/hooks/useAuth";
+import * as AppleCalendar from "expo-calendar";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -18,13 +29,19 @@ interface CalendarEventsContextValue {
   loading: boolean;
   addEvents: (items: ScheduleEvent[]) => void;
   addDragEvent: (event: EventItem) => void;
-  updateEvent: (id: string, start: EventItem["start"], end: EventItem["end"]) => void;
+  updateEvent: (
+    id: string,
+    start: EventItem["start"],
+    end: EventItem["end"],
+  ) => void;
   updateEvents: (updates: ScheduleUpdate[]) => Promise<void>;
   deleteEvents: (deletes: ScheduleDelete[]) => Promise<void>;
   refreshEvents: () => Promise<void>;
 }
 
-const CalendarEventsContext = createContext<CalendarEventsContextValue | null>(null);
+const CalendarEventsContext = createContext<CalendarEventsContextValue | null>(
+  null,
+);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -57,16 +74,51 @@ function toEventItem(evt: BackendEvent): EventItem {
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
-export function CalendarEventsProvider({ children }: { children: React.ReactNode }) {
+export function CalendarEventsProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { isAuthenticated, user } = useAuth();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // fetch all local calendar events
+  const fetchLocalCalendarEvents = useCallback(async () => {
+    const { status: calendarStatus } =
+      await AppleCalendar.requestCalendarPermissionsAsync();
+    if (calendarStatus === "granted") {
+      const startDate = new Date(); // e.g., today
+      const endDate = new Date();
+      endDate.setMonth(startDate.getMonth() + 1); // 1 month from now
+
+      const calendars = await AppleCalendar.getCalendarsAsync(
+        AppleCalendar.EntityTypes.EVENT,
+      );
+      const calendarIds = calendars.map((calendar) => calendar.id);
+      const events = await AppleCalendar.getEventsAsync(
+        calendarIds,
+        startDate,
+        endDate,
+      );
+      const localEvents: EventItem[] = events.map((evt) => ({
+        id: `local-${evt.id}`,
+        title: `📅 ${evt.title}`,
+        start: { dateTime: evt.startDate.toLocaleString() },
+        end: { dateTime: evt.endDate.toLocaleString() },
+        color: "#6b7280",
+        draggable: false, // Local events are read-only
+      }));
+      setEvents((prev) => [...prev, ...localEvents]);
+    }
+  }, []);
 
   /** Fetch all events from the backend and sync local state. */
   const refreshEvents = useCallback(async () => {
     try {
       setLoading(true);
       const backendEvents = await fetchAllEvents();
+      fetchLocalCalendarEvents(); // Fetch local events and merge them
       setEvents(backendEvents.map(toEventItem));
     } catch (err) {
       console.error("Failed to fetch events:", err);
@@ -86,33 +138,30 @@ export function CalendarEventsProvider({ children }: { children: React.ReactNode
   }, [isAuthenticated, user?.id, refreshEvents]);
 
   /** Add events from a Gemini SCHEDULE_READY block → saves to DB. */
-  const addEvents = useCallback(
-    async (items: ScheduleEvent[]) => {
-      try {
-        const payloads = items.map((evt, _index) => {
-          const [hours, minutes] = evt.time.split(":").map(Number);
-          const startDate = new Date(`${evt.date}T00:00:00`);
-          startDate.setHours(hours, minutes, 0, 0);
+  const addEvents = useCallback(async (items: ScheduleEvent[]) => {
+    try {
+      const payloads = items.map((evt, _index) => {
+        const [hours, minutes] = evt.time.split(":").map(Number);
+        const startDate = new Date(`${evt.date}T00:00:00`);
+        startDate.setHours(hours, minutes, 0, 0);
 
-          const durationMs = (evt.duration_minutes ?? 60) * 60 * 1000;
-          const endDate = new Date(startDate.getTime() + durationMs);
+        const durationMs = (evt.duration_minutes ?? 60) * 60 * 1000;
+        const endDate = new Date(startDate.getTime() + durationMs);
 
-          return {
-            title: evt.title,
-            start: startDate.toISOString(),
-            end: endDate.toISOString(),
-            color: colorForType(evt.type),
-          };
-        });
+        return {
+          title: evt.title,
+          start: startDate.toISOString(),
+          end: endDate.toISOString(),
+          color: colorForType(evt.type),
+        };
+      });
 
-        const created = await createManyEvents(payloads);
-        setEvents((prev) => [...prev, ...created.map(toEventItem)]);
-      } catch (err) {
-        console.error("Failed to create events:", err);
-      }
-    },
-    []
-  );
+      const created = await createManyEvents(payloads);
+      setEvents((prev) => [...prev, ...created.map(toEventItem)]);
+    } catch (err) {
+      console.error("Failed to create events:", err);
+    }
+  }, []);
 
   /** Add a single event from drag-to-create in the calendar UI → saves to DB. */
   const addDragEvent = useCallback(async (event: EventItem) => {
@@ -138,7 +187,7 @@ export function CalendarEventsProvider({ children }: { children: React.ReactNode
 
       // Optimistic UI update
       setEvents((prev) =>
-        prev.map((ev) => (ev.id === id ? { ...ev, start, end } : ev))
+        prev.map((ev) => (ev.id === id ? { ...ev, start, end } : ev)),
       );
 
       try {
@@ -152,7 +201,7 @@ export function CalendarEventsProvider({ children }: { children: React.ReactNode
         refreshEvents();
       }
     },
-    [refreshEvents]
+    [refreshEvents],
   );
 
   /** Update events from a Gemini SCHEDULE_UPDATE block → updates DB. */
@@ -179,28 +228,38 @@ export function CalendarEventsProvider({ children }: { children: React.ReactNode
         console.error("Failed to update events:", err);
       }
     },
-    [refreshEvents]
+    [refreshEvents],
   );
 
   /** Delete events from a Gemini SCHEDULE_DELETE block → removes from DB. */
-  const deleteEvents = useCallback(
-    async (deletes: ScheduleDelete[]) => {
-      try {
-        await deleteManyEvents(deletes.map((d) => d.id));
-        // Remove from local state immediately
-        const deletedIds = new Set(deletes.map((d) => d.id));
-        setEvents((prev) => prev.filter((ev) => !deletedIds.has(ev.id as string)));
-      } catch (err) {
-        console.error("Failed to delete events:", err);
-      }
-    },
-    []
-  );
+  const deleteEvents = useCallback(async (deletes: ScheduleDelete[]) => {
+    try {
+      await deleteManyEvents(deletes.map((d) => d.id));
+      // Remove from local state immediately
+      const deletedIds = new Set(deletes.map((d) => d.id));
+      setEvents((prev) =>
+        prev.filter((ev) => !deletedIds.has(ev.id as string)),
+      );
+    } catch (err) {
+      console.error("Failed to delete events:", err);
+    }
+  }, []);
 
   return React.createElement(
     CalendarEventsContext.Provider,
-    { value: { events, loading, addEvents, addDragEvent, updateEvent, updateEvents, deleteEvents, refreshEvents } },
-    children
+    {
+      value: {
+        events,
+        loading,
+        addEvents,
+        addDragEvent,
+        updateEvent,
+        updateEvents,
+        deleteEvents,
+        refreshEvents,
+      },
+    },
+    children,
   );
 }
 
@@ -209,7 +268,9 @@ export function CalendarEventsProvider({ children }: { children: React.ReactNode
 export function useCalendarEvents() {
   const ctx = useContext(CalendarEventsContext);
   if (!ctx) {
-    throw new Error("useCalendarEvents must be used within CalendarEventsProvider");
+    throw new Error(
+      "useCalendarEvents must be used within CalendarEventsProvider",
+    );
   }
   return ctx;
 }

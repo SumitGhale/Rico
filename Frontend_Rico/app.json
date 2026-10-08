@@ -45,6 +45,13 @@
     "plugins": [
       "expo-router",
       [
+        "expo-calendar",
+        {
+          "calendarPermission": "Rico needs to access your calendar to synchronize events.",
+          "reminderPermission": "The app needs to access your reminders to notify you of upcoming tasks."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

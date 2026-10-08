@@ -1,6 +1,13 @@
-import { CalendarBody, CalendarContainer, CalendarHeader } from '@howljs/calendar-kit';
-import type { OnEventResponse, OnCreateEventResponse } from '@howljs/calendar-kit';
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  CalendarBody,
+  CalendarContainer,
+  CalendarHeader,
+} from "@howljs/calendar-kit";
+import type {
+  OnEventResponse,
+  OnCreateEventResponse,
+} from "@howljs/calendar-kit";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -9,18 +16,18 @@ import {
   StyleSheet,
   Modal,
   Pressable,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useCalendarEvents } from '@/hooks/useCalendarEvents';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useCalendarEvents } from "@/hooks/useCalendarEvents";
 import {
   checkGoogleConnectionStatus,
   connectGoogleCalendar,
-} from '@/services/googleAuthService';
-import { MonthlyCalendarView } from '@/components/MonthlyCalendarView';
+} from "@/services/googleAuthService";
+import { MonthlyCalendarView } from "@/components/MonthlyCalendarView";
 
 // ─── View Mode Types ──────────────────────────────────────────────────────────
 
-type ViewMode = 'day' | '3day' | 'week' | 'month';
+type ViewMode = "day" | "3day" | "week" | "month";
 
 interface ViewOption {
   key: ViewMode;
@@ -29,10 +36,10 @@ interface ViewOption {
 }
 
 const VIEW_OPTIONS: ViewOption[] = [
-  { key: 'day', label: 'Day', numberOfDays: 1 },
-  { key: '3day', label: '3-Day', numberOfDays: 3 },
-  { key: 'week', label: 'Week', numberOfDays: 7 },
-  { key: 'month', label: 'Month', numberOfDays: 0 },
+  { key: "day", label: "Day", numberOfDays: 1 },
+  { key: "3day", label: "3-Day", numberOfDays: 3 },
+  { key: "week", label: "Week", numberOfDays: 7 },
+  { key: "month", label: "Month", numberOfDays: 0 },
 ];
 
 // ─── View Mode Selector ──────────────────────────────────────────────────────
@@ -45,7 +52,12 @@ function ViewModeSelector({
   onChange: (mode: ViewMode) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [buttonLayout, setButtonLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [buttonLayout, setButtonLayout] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
   const buttonRef = useRef<View>(null);
 
   const currentOption = VIEW_OPTIONS.find((o) => o.key === current)!;
@@ -74,7 +86,7 @@ function ViewModeSelector({
         >
           <Text style={styles.selectorButtonText}>{currentOption.label}</Text>
           <Ionicons
-            name={isOpen ? 'chevron-up' : 'chevron-down'}
+            name={isOpen ? "chevron-up" : "chevron-down"}
             size={14}
             color="#374151"
           />
@@ -88,7 +100,10 @@ function ViewModeSelector({
         animationType="fade"
         onRequestClose={() => setIsOpen(false)}
       >
-        <Pressable style={styles.dropdownOverlay} onPress={() => setIsOpen(false)}>
+        <Pressable
+          style={styles.dropdownOverlay}
+          onPress={() => setIsOpen(false)}
+        >
           <View
             style={[
               styles.dropdownMenu,
@@ -104,7 +119,10 @@ function ViewModeSelector({
               return (
                 <TouchableOpacity
                   key={option.key}
-                  style={[styles.dropdownItem, isActive && styles.dropdownItemActive]}
+                  style={[
+                    styles.dropdownItem,
+                    isActive && styles.dropdownItemActive,
+                  ]}
                   onPress={() => handleSelect(option.key)}
                   activeOpacity={0.6}
                 >
@@ -165,7 +183,9 @@ function GoogleCalendarBanner() {
     return (
       <View style={[styles.banner, styles.bannerConnected]}>
         <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
-        <Text style={styles.bannerTextConnected}>Google Calendar connected</Text>
+        <Text style={styles.bannerTextConnected}>
+          Google Calendar connected
+        </Text>
       </View>
     );
   }
@@ -192,11 +212,13 @@ function GoogleCalendarBanner() {
 
 // ─── Main Calendar Screen ─────────────────────────────────────────────────────
 
-const Calendar = () => {
+export default function Calendar() {
   const { events, addDragEvent, updateEvent } = useCalendarEvents();
-  const [viewMode, setViewMode] = useState<ViewMode>('3day');
+  const [viewMode, setViewMode] = useState<ViewMode>("3day");
 
-  const currentNumberOfDays = VIEW_OPTIONS.find((o) => o.key === viewMode)!.numberOfDays;
+  const currentNumberOfDays = VIEW_OPTIONS.find(
+    (o) => o.key === viewMode,
+  )!.numberOfDays;
 
   const handleDragCreateStart = (event: OnCreateEventResponse) => {
     console.log("Started creating event at:", event);
@@ -214,7 +236,11 @@ const Calendar = () => {
   };
 
   const handleDragEnd = (event: OnEventResponse) => {
-    console.log(`Event ${event.id} moved to:`, event.start.dateTime, event.end.dateTime);
+    console.log(
+      `Event ${event.id} moved to:`,
+      event.start.dateTime,
+      event.end.dateTime,
+    );
     updateEvent(event.id as string, event.start, event.end);
   };
 
@@ -227,7 +253,7 @@ const Calendar = () => {
         <ViewModeSelector current={viewMode} onChange={setViewMode} />
       </View>
 
-      {viewMode === 'month' ? (
+      {viewMode === "month" ? (
         <MonthlyCalendarView events={events} />
       ) : (
         <CalendarContainer
@@ -246,38 +272,38 @@ const Calendar = () => {
       )}
     </View>
   );
-};
+}
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   // ─── Toolbar ───
   toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: "#e5e7eb",
   },
 
   // ─── Selector pill button ───
   selectorButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#ffffff',
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
   },
   selectorButtonText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
+    fontWeight: "500",
+    color: "#374151",
   },
 
   // ─── Dropdown overlay & menu ───
@@ -285,79 +311,77 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dropdownMenu: {
-    position: 'absolute',
-    backgroundColor: '#ffffff',
+    position: "absolute",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     paddingVertical: 4,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: "#e5e7eb",
   },
   dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
   dropdownItemActive: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: "#eff6ff",
   },
   dropdownItemText: {
     fontSize: 15,
-    color: '#374151',
+    color: "#374151",
   },
   dropdownItemTextActive: {
-    color: '#3b82f6',
-    fontWeight: '600',
+    color: "#3b82f6",
+    fontWeight: "600",
   },
 
   // ─── Google Banner ───
   banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
+    borderBottomColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
   },
   bannerConnected: {
-    backgroundColor: '#f0fdf4',
-    borderBottomColor: '#bbf7d0',
+    backgroundColor: "#f0fdf4",
+    borderBottomColor: "#bbf7d0",
   },
   bannerDisconnected: {
-    backgroundColor: '#fafafa',
+    backgroundColor: "#fafafa",
   },
   bannerTextMuted: {
     flex: 1,
     fontSize: 13,
-    color: '#6b7280',
+    color: "#6b7280",
   },
   bannerTextConnected: {
     flex: 1,
     fontSize: 13,
-    color: '#16a34a',
-    fontWeight: '500',
+    color: "#16a34a",
+    fontWeight: "500",
   },
   connectButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: "#3b82f6",
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 8,
     minWidth: 72,
-    alignItems: 'center',
+    alignItems: "center",
   },
   connectButtonText: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });
-
-export default Calendar;
