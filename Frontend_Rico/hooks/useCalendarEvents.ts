@@ -85,31 +85,50 @@ export function CalendarEventsProvider({
 
   // fetch all local calendar events
   const fetchLocalCalendarEvents = useCallback(async () => {
-    const { status: calendarStatus } =
-      await AppleCalendar.requestCalendarPermissionsAsync();
-    if (calendarStatus === "granted") {
-      const startDate = new Date(); // e.g., today
-      const endDate = new Date();
-      endDate.setMonth(startDate.getMonth() + 1); // 1 month from now
+    try {
+      const { status } = await AppleCalendar.getCalendarPermissionsAsync();
+      console.log("Calendar permission response:", status);
+      if (status === "granted") {
+        const startDate = new Date(); // e.g., today
+        const endDate = new Date();
+        endDate.setMonth(startDate.getMonth() + 1); // 1 month from now
 
-      const calendars = await AppleCalendar.getCalendarsAsync(
-        AppleCalendar.EntityTypes.EVENT,
-      );
-      const calendarIds = calendars.map((calendar) => calendar.id);
-      const events = await AppleCalendar.getEventsAsync(
-        calendarIds,
-        startDate,
-        endDate,
-      );
-      const localEvents: EventItem[] = events.map((evt) => ({
-        id: `local-${evt.id}`,
-        title: `📅 ${evt.title}`,
-        start: { dateTime: evt.startDate.toLocaleString() },
-        end: { dateTime: evt.endDate.toLocaleString() },
-        color: "#6b7280",
-        draggable: false, // Local events are read-only
-      }));
-      setEvents((prev) => [...prev, ...localEvents]);
+        const calendars = await AppleCalendar.getCalendarsAsync(
+          AppleCalendar.EntityTypes.EVENT,
+        );
+        const calendarIds = calendars.map((calendar) => calendar.id);
+        const events = await AppleCalendar.getEventsAsync(
+          calendarIds,
+          startDate,
+          endDate,
+        );
+        const localEvents: EventItem[] = events.map((evt) => ({
+          id: `local-${evt.id}`,
+          title: `📅 ${evt.title}`,
+          start: { dateTime: new Date(evt.startDate).toISOString() },
+          end: { dateTime: new Date(evt.endDate).toISOString() },
+          color: "#6b7280",
+          draggable: false, // Local events are read-only
+        }));
+        setEvents((prev) => [
+          ...prev.filter((e) => !e.id.startsWith("local-")),
+          ...localEvents,
+        ]);
+      } else if (status === "denied") {
+        console.warn("Calendar permission denied. Cannot fetch local events.");
+      } else {
+        const { status } =
+          await AppleCalendar.requestCalendarPermissionsAsync();
+        if (status === "granted") {
+          await fetchLocalCalendarEvents(); // Retry fetching after permission granted
+        } else {
+          console.warn(
+            "Calendar permission denied. Cannot fetch local events.",
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch local calendar events:", error);
     }
   }, []);
 
@@ -118,8 +137,8 @@ export function CalendarEventsProvider({
     try {
       setLoading(true);
       const backendEvents = await fetchAllEvents();
-      fetchLocalCalendarEvents(); // Fetch local events and merge them
       setEvents(backendEvents.map(toEventItem));
+      await fetchLocalCalendarEvents(); // Fetch local events and merge them
     } catch (err) {
       console.error("Failed to fetch events:", err);
     } finally {

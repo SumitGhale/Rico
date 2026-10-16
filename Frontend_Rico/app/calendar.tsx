@@ -6,6 +6,7 @@ import {
 import type {
   OnEventResponse,
   OnCreateEventResponse,
+  CalendarKitHandle,
 } from "@howljs/calendar-kit";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -24,6 +25,7 @@ import {
   connectGoogleCalendar,
 } from "@/services/googleAuthService";
 import { MonthlyCalendarView } from "@/components/MonthlyCalendarView";
+import { CreateEventBottomSheet } from "@/components/createEventBottomSheet";
 
 // ─── View Mode Types ──────────────────────────────────────────────────────────
 
@@ -215,6 +217,9 @@ function GoogleCalendarBanner() {
 export default function Calendar() {
   const { events, addDragEvent, updateEvent } = useCalendarEvents();
   const [viewMode, setViewMode] = useState<ViewMode>("3day");
+  const calendarRef = useRef<CalendarKitHandle>(null);
+  const [selectedEvent, setSelectedEvent] = useState<OnEventResponse | null>(null);
+  const [sheetIndex, setSheetIndex] = useState(-1);
 
   const currentNumberOfDays = VIEW_OPTIONS.find(
     (o) => o.key === viewMode,
@@ -224,6 +229,7 @@ export default function Calendar() {
     console.log("Started creating event at:", event);
   };
 
+  // When user drags on the grid:
   const handleDragCreateEnd = (event: OnCreateEventResponse) => {
     console.log("New event:", event);
     addDragEvent({
@@ -234,6 +240,17 @@ export default function Calendar() {
       color: "#42d9f4ff",
     });
   };
+  const handleEventCreated = (title: string, startDate: Date, endDate: Date, color: string) => {
+    console.log("Event created with start:", startDate, "and end:", endDate);
+    addDragEvent({
+      id: `drag-${Date.now()}`,
+      title: title,
+      start: { dateTime: startDate.toISOString() },
+      end: { dateTime: endDate.toISOString() },
+      color: color,
+    });
+    setSheetIndex(-1); // Close the bottom sheet
+  }
 
   const handleDragEnd = (event: OnEventResponse) => {
     console.log(
@@ -244,6 +261,20 @@ export default function Calendar() {
     updateEvent(event.id as string, event.start, event.end);
   };
 
+  const showEventDetails = (event: OnEventResponse) => {
+    setSelectedEvent(event);
+    setSheetIndex(0); // Open the bottom sheet
+  }
+
+  const goToToday = () => {
+    calendarRef.current?.goToDate({
+      date: new Date().toISOString(),
+      animatedDate: true,
+      hourScroll: true,
+      animatedHour: true,
+    });
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <GoogleCalendarBanner />
@@ -251,12 +282,27 @@ export default function Calendar() {
       {/* ─── Toolbar with view mode selector ─── */}
       <View style={styles.toolbar}>
         <ViewModeSelector current={viewMode} onChange={setViewMode} />
+        <Text className="px-4">
+          {new Date().toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          })}
+        </Text>
+        {/* ─── Floating Today Button ─── */}
+        <TouchableOpacity
+          onPress={goToToday}
+          activeOpacity={0.8}
+          className="ml-auto items-center justify-center px-4 py-2 rounded-full border border-gray-300 bg-white"
+        >
+          <Text className="text-sm font-semibold text-black">Today</Text>
+        </TouchableOpacity>
       </View>
 
       {viewMode === "month" ? (
         <MonthlyCalendarView events={events} />
       ) : (
         <CalendarContainer
+          ref={calendarRef}
           numberOfDays={currentNumberOfDays}
           allowDragToCreate={true}
           onDragCreateEventStart={handleDragCreateStart}
@@ -265,11 +311,28 @@ export default function Calendar() {
           allowDragToEdit={true}
           onDragEventEnd={handleDragEnd}
           events={events}
+          onPressEvent={showEventDetails}
         >
           <CalendarHeader />
           <CalendarBody />
         </CalendarContainer>
       )}
+
+      {/* Floating Add (+) Button */}
+      {sheetIndex == -1 && (
+        <TouchableOpacity
+          onPress={() => {
+            setSelectedEvent(null); // Clear any selected event
+            setSheetIndex(0);
+          }}
+          className="absolute bottom-8 right-5 z-50 h-20 w-20 items-center justify-center rounded-full bg-blue-500 shadow-lg"
+        >
+          <Ionicons name="add" size={30} color="#ffffff" />
+        </TouchableOpacity>
+      )}
+
+      {/* Bottom Sheet */}
+      <CreateEventBottomSheet eventTitle="" idx={sheetIndex} onEventCreated={handleEventCreated} setIndex={setSheetIndex} event={selectedEvent} />
     </View>
   );
 }
