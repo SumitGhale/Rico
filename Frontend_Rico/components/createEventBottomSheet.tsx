@@ -16,10 +16,11 @@ import { frame } from "@expo/ui/swift-ui/modifiers";
 
 interface CreateEventBottomSheetProps {
   idx: number;
-  onEventCreated: (eventTitle: string, startDate: Date, endDate: Date, color: string) => void;
+  onEventCreated?: (eventTitle: string, startDate: Date, endDate: Date, color: string) => void;
   setIndex: (index: number) => void;
   eventTitle: string;
-  event?: OnEventResponse | null; // Optional prop for the selected event
+  event?: OnEventResponse | null; 
+  onEventUpdate? : (id: string, title: string, startDate: Date, endDate: Date, color: string) => void;
 }
 
 export function CreateEventBottomSheet({
@@ -28,13 +29,14 @@ export function CreateEventBottomSheet({
   setIndex,
   eventTitle,
   event,
+  onEventUpdate,
 }: CreateEventBottomSheetProps) {
   const sheetRef = useRef<BottomSheet>(null);
   const [title, setTitle] = React.useState(eventTitle);
   const [startDate, setStartDate] = React.useState(new Date());
   const [endDate, setEndDate] = React.useState(
     new Date(Date.now() + 60 * 60 * 1000),
-  ); // default to 1 hour later
+  ); 
   const [color, setColor] = useState("#FF6347");
 
   useEffect(() => {
@@ -66,7 +68,9 @@ export function CreateEventBottomSheet({
   const handleSave = () => {
     Keyboard.dismiss();
     sheetRef.current?.close();
-    onEventCreated(title, startDate, endDate,color);
+    event != null
+      ? onEventUpdate && onEventUpdate(event.id as string, title, startDate, endDate, color)
+      : onEventCreated && onEventCreated(title, startDate, endDate, color);
     setTitle(""); // reset input
   };
 

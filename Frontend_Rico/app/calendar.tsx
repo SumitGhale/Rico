@@ -17,6 +17,7 @@ import {
   StyleSheet,
   Modal,
   Pressable,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useCalendarEvents } from "@/hooks/useCalendarEvents";
@@ -215,10 +216,13 @@ function GoogleCalendarBanner() {
 // ─── Main Calendar Screen ─────────────────────────────────────────────────────
 
 export default function Calendar() {
-  const { events, addDragEvent, updateEvent } = useCalendarEvents();
+  const { events, addDragEvent, updateEventByDragging, updateEventManual } =
+    useCalendarEvents();
   const [viewMode, setViewMode] = useState<ViewMode>("3day");
   const calendarRef = useRef<CalendarKitHandle>(null);
-  const [selectedEvent, setSelectedEvent] = useState<OnEventResponse | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<OnEventResponse | null>(
+    null,
+  );
   const [sheetIndex, setSheetIndex] = useState(-1);
 
   const currentNumberOfDays = VIEW_OPTIONS.find(
@@ -240,7 +244,12 @@ export default function Calendar() {
       color: "#42d9f4ff",
     });
   };
-  const handleEventCreated = (title: string, startDate: Date, endDate: Date, color: string) => {
+  const handleEventCreated = (
+    title: string,
+    startDate: Date,
+    endDate: Date,
+    color: string,
+  ) => {
     console.log("Event created with start:", startDate, "and end:", endDate);
     addDragEvent({
       id: `drag-${Date.now()}`,
@@ -250,7 +259,7 @@ export default function Calendar() {
       color: color,
     });
     setSheetIndex(-1); // Close the bottom sheet
-  }
+  };
 
   const handleDragEnd = (event: OnEventResponse) => {
     console.log(
@@ -258,13 +267,29 @@ export default function Calendar() {
       event.start.dateTime,
       event.end.dateTime,
     );
-    updateEvent(event.id as string, event.start, event.end);
+    updateEventByDragging(event.id as string, event.start, event.end);
+  };
+
+  const handleEventUpdate = (
+    id: string,
+    title: string,
+    startDate: Date,
+    endDate: Date,
+    color: string,
+  ) => {
+    if (id.startsWith("local-") || id.startsWith("gcal-")) {
+      return Alert.alert(
+        "Can't edit this event",
+        "Google and Apple Calendar events are read-only in this version.",
+      ); // Read-only events
+    }
+    updateEventManual(id, title, startDate, endDate, color);
   };
 
   const showEventDetails = (event: OnEventResponse) => {
     setSelectedEvent(event);
     setSheetIndex(0); // Open the bottom sheet
-  }
+  };
 
   const goToToday = () => {
     calendarRef.current?.goToDate({
@@ -332,7 +357,14 @@ export default function Calendar() {
       )}
 
       {/* Bottom Sheet */}
-      <CreateEventBottomSheet eventTitle="" idx={sheetIndex} onEventCreated={handleEventCreated} setIndex={setSheetIndex} event={selectedEvent} />
+      <CreateEventBottomSheet
+        eventTitle=""
+        idx={sheetIndex}
+        onEventCreated={handleEventCreated}
+        setIndex={setSheetIndex}
+        event={selectedEvent}
+        onEventUpdate={handleEventUpdate}
+      />
     </View>
   );
 }

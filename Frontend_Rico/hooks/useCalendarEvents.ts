@@ -29,10 +29,17 @@ interface CalendarEventsContextValue {
   loading: boolean;
   addEvents: (items: ScheduleEvent[]) => void;
   addDragEvent: (event: EventItem) => void;
-  updateEvent: (
+  updateEventByDragging: (
     id: string,
     start: EventItem["start"],
     end: EventItem["end"],
+  ) => void;
+  updateEventManual: (
+    id: string,
+    title: string,
+    startDate: Date,
+    endDate: Date,
+    color: string,
   ) => void;
   updateEvents: (updates: ScheduleUpdate[]) => Promise<void>;
   deleteEvents: (deletes: ScheduleDelete[]) => Promise<void>;
@@ -199,10 +206,10 @@ export function CalendarEventsProvider({
   }, []);
 
   /** Update an event's time (from drag-to-edit) → updates DB. */
-  const updateEvent = useCallback(
+  const updateEventByDragging = useCallback(
     async (id: string, start: EventItem["start"], end: EventItem["end"]) => {
       // Google Calendar events are read-only
-      if (typeof id === "string" && id.startsWith("gcal-")) return;
+      if (typeof id === "string" && (id.startsWith("local-") || id.startsWith("gcal-"))) return;
 
       // Optimistic UI update
       setEvents((prev) =>
@@ -222,6 +229,43 @@ export function CalendarEventsProvider({
     },
     [refreshEvents],
   );
+
+  const updateEventManual = (
+    id: string,
+    title: string,
+    startDate: Date,
+    endDate: Date,
+    color: string,
+  ) => {
+    if (id.startsWith("local-") || id.startsWith("gcal-")) return; // Read-only events
+    try {
+      updateEventById(id, {
+        title: title,
+        start: startDate.toISOString(),
+        end: endDate.toISOString(),
+        color: color,
+      });
+
+      // Optimistic UI update
+      setEvents((prev) =>
+        prev.map((ev) =>
+          ev.id === id
+            ? {
+                ...ev,
+                title,
+                start: { dateTime: startDate.toISOString() },
+                end: { dateTime: endDate.toISOString() },
+                color,
+              }
+            : ev,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to update event:", err);
+      // Revert on failure by re-fetching
+      refreshEvents();
+    }
+  };
 
   /** Update events from a Gemini SCHEDULE_UPDATE block → updates DB. */
   const updateEvents = useCallback(
@@ -272,7 +316,8 @@ export function CalendarEventsProvider({
         loading,
         addEvents,
         addDragEvent,
-        updateEvent,
+        updateEventManual,
+        updateEventByDragging,
         updateEvents,
         deleteEvents,
         refreshEvents,
